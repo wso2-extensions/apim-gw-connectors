@@ -31,8 +31,18 @@ public class AzureConstants {
             AZURE_API_EXECUTION_URL_TEMPLATE_SERVICE_NAME_PLACEHOLDER + "." +
             AZURE_API_EXECUTION_URL_TEMPLATE_HOSTNAME_PLACEHOLDER +
             AZURE_API_EXECUTION_URL_TEMPLATE_CONTEXT_PLACEHOLDER;
-    public static final String AZURE_EXTERNAL_REFERENCE_PATH = "path";
+
+    public static final String AZURE_EXTERNAL_REFERENCE_CONTEXT = "context";
     public static final String AZURE_EXTERNAL_REFERENCE_UUID = "uuid";
+    public static final String AZURE_EXTERNAL_REFERENCE_ID = "id";
+    public static final String AZURE_EXTERNAL_REFERENCE_ARTIFACT_TYPE = "azureArtifactType";
+    public static final String AZURE_EXTERNAL_REFERENCE_DISPLAY_NAME = "displayName";
+    public static final String AZURE_EXTERNAL_REFERENCE_VERSION = "version";
+    public static final String AZURE_EXTERNAL_REFERENCE_PATH = "path";
+    public static final String AZURE_EXTERNAL_REFERENCE_SERVICE_URL = "serviceUrl";
+    public static final String AZURE_EXTERNAL_REFERENCE_VERSION_SET_ID = "versionSetId";
+    public static final String AZURE_EXTERNAL_REFERENCE_VERSIONING_SCHEME = "versioningScheme";
+
     public static final String AZURE_OPENAPI_EXPORT_VERSION = "2024-05-01";
     public static final String AZURE_OPENAPI_EXPORT_FORMAT = "openapi-link";
     public static final String AZURE_VERSION_SET_ID_PREFIX = "WSO2APIVersionSet-";
@@ -41,10 +51,16 @@ public class AzureConstants {
 
     public static final String AZURE_OPERATION_POLICY_NAME = "azureOAuth2";
     public static final String AZURE_OPERATION_POLICY_PARAMETER_OPENID_URL = "openIdURL";
+    public static final String AZURE_JWT_OPERATION_POLICY_OPENID_URL_PLACEHOLDER = "${openIdURL}";
+
+    public static final String AZURE_CORS_POLICY_ALLOWED_ORIGINS = "allowed-origins";
+    public static final String AZURE_CORS_POLICY_ALLOWED_METHODS = "allowed-methods";
+    public static final String AZURE_CORS_POLICY_ALLOWED_HEADERS = "allowed-headers";
 
     public static final String GATEWAY_FEATURE_CATALOG_FILENAME = "GatewayFeatureCatalog.json";
-    public static final String AZURE_CORS_POLICY_FILENAME = "AzureCORSPolicy.xml";
-    public static final String AZURE_JWT_POLICY_FILENAME = "AzureJWTPolicy.xml";
+    public static final String AZURE_CORS_POLICY_FILENAME = "policies/cors.xml";
+    public static final String AZURE_JWT_POLICY_FILENAME = "policies/jwt.xml";
+    public static final String AZURE_BASE_POLICY_FILENAME = "policies/base.xml";
 
     // Environment related constants
     public static final String AZURE_ENVIRONMENT_TENANT_ID = "tenant_id";

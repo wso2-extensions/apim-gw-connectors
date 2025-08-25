@@ -25,12 +25,15 @@ import com.azure.core.http.HttpPipeline;
 import com.azure.core.http.HttpRequest;
 import com.azure.core.http.HttpResponse;
 import com.azure.core.util.Context;
+import com.azure.core.util.IterableStream;
 import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.fluent.models.PolicyContractInner;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
+import com.azure.resourcemanager.apimanagement.models.ApiOperationPoliciesCreateOrUpdateResponse;
 import com.azure.resourcemanager.apimanagement.models.ApiPoliciesCreateOrUpdateResponse;
 import com.azure.resourcemanager.apimanagement.models.ApiVersionSetContract;
 import com.azure.resourcemanager.apimanagement.models.ContentFormat;
+import com.azure.resourcemanager.apimanagement.models.OperationContract;
 import com.azure.resourcemanager.apimanagement.models.PolicyContentFormat;
 import com.azure.resourcemanager.apimanagement.models.PolicyIdName;
 import com.azure.resourcemanager.apimanagement.models.VersioningScheme;
@@ -42,37 +45,22 @@ import com.google.gson.JsonParser;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 import org.wso2.azure.gw.client.AzureConstants;
-import org.wso2.azure.gw.client.AzureGatewayConfiguration;
 import org.wso2.azure.gw.client.model.ExportEnvelope;
+import org.wso2.azure.gw.client.policy.AzureCORSPolicy;
+import org.wso2.azure.gw.client.policy.AzureJWTPolicy;
+import org.wso2.azure.gw.client.policy.AzurePolicyBuilder;
+import org.wso2.azure.gw.client.policy.AzurePolicyBuilderFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.Tier;
-import org.xml.sax.InputSource;
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
+import org.wso2.carbon.apimgt.api.model.URITemplate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
-import javax.xml.XMLConstants;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 /**
  * This class contains utility methods to interact with Azure API Gateway.
@@ -99,7 +87,8 @@ public class AzureAPIUtil {
                 throw new APIManagementException("Endpoint configuration is empty for API: " + api.getId());
             }
             JsonObject endpointConfigJson = JsonParser.parseString(endpointConfig).getAsJsonObject();
-            JsonObject prodEndpoints = endpointConfigJson.has("production_endpoints") &&
+            JsonObject prodEndpoints = endpointConfigJson != null &&
+                      endpointConfigJson.has("production_endpoints") &&
                       endpointConfigJson.get("production_endpoints").isJsonObject()
                     ? endpointConfigJson.getAsJsonObject("production_endpoints")
                     : null;
@@ -109,7 +98,6 @@ public class AzureAPIUtil {
                     ? prodEndpoints.get("url").getAsString()
                     : null;
             if (productionEndpoint == null) {
-                log.error("Production endpoint URL is null for API: " + api.getId());
                 throw new APIManagementException("Production endpoint URL is null for API: " + api.getId());
             }
             productionEndpoint = productionEndpoint.endsWith("/") ?
@@ -121,7 +109,7 @@ public class AzureAPIUtil {
                     .withVersioningScheme(VersioningScheme.SEGMENT).create();
 
             ApiContract apiContract = manager.apis()
-                    .define(api.getUuid())
+                    .define(api.getUuid()) // Use UUID as the API name since name needs to be unique
                     .withExistingService(resourceGroup, serviceName)
                     .withDisplayName(api.getId().getApiName())
                     .withPath(getContextWithoutVersion(api.getContext(), api.getId().getVersion()))
@@ -136,63 +124,73 @@ public class AzureAPIUtil {
                 log.debug("API deployed successfully to Azure Gateway: " + api.getUuid());
             }
 
-            // Attach CORS and OAuth2 Policies
-            String corsPolicyContent = null;
-            try (InputStream inputStream = AzureGatewayConfiguration.class.getClassLoader()
-                    .getResourceAsStream(AzureConstants.AZURE_CORS_POLICY_FILENAME)) {
+            AzurePolicyBuilderFactory policyBuilderFactory = new AzurePolicyBuilderFactory();
+            AzurePolicyBuilder apiLevelPolicyBuilder =
+                    policyBuilderFactory.newPolicyBuilder();
+            apiLevelPolicyBuilder.addPolicy(new AzureCORSPolicy(api.getCorsConfiguration()));
 
-                if (inputStream == null) {
-                    throw new APIManagementException("CORS Policy file not found");
-                }
-                corsPolicyContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-                if (corsPolicyContent.isEmpty()) {
-                    throw new APIManagementException("CORS policy content is empty for API: " + api.getId());
-                }
-            }
-
-            //configure OAuth2 policy
+            //configure API level policies
             List<OperationPolicy> apiPolicies = api.getApiPolicies();
             if (apiPolicies != null) {
                 for (OperationPolicy policy : apiPolicies) {
                     if (policy.getPolicyName().equals(AzureConstants.AZURE_OPERATION_POLICY_NAME)) {
                         String openIdURL = policy.getParameters()
                                 .get(AzureConstants.AZURE_OPERATION_POLICY_PARAMETER_OPENID_URL).toString();
-                        String jwtPolicyContent = null;
-                        try (InputStream inputStream = AzureGatewayConfiguration.class.getClassLoader()
-                                .getResourceAsStream(AzureConstants.AZURE_JWT_POLICY_FILENAME)) {
-
-                            if (inputStream == null) {
-                                throw new APIManagementException("JWT Policy file not found");
-                            }
-                            jwtPolicyContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-                            jwtPolicyContent = jwtPolicyContent.replace("${openIdURL}", openIdURL);
-                            if (jwtPolicyContent.isEmpty()) {
-                                throw new APIManagementException("JWT policy content is empty for API: " + api.getId());
-                            }
-                        }
-                        if (corsPolicyContent != null && jwtPolicyContent != null) {
-                            try {
-                                corsPolicyContent = attachPolicyToParentPolicy(corsPolicyContent, jwtPolicyContent);
-                            } catch (APIManagementException e) {
-                                throw new APIManagementException("Error attaching JWT policy to CORS policy for API: "
-                                        + api.getId(), e);
-                            }
-                        }
+                        apiLevelPolicyBuilder.addPolicy(new AzureJWTPolicy(openIdURL));
                         break;
                     }
                 }
             }
 
-            if (corsPolicyContent != null) {
+            String apiLevelPolicyContent = apiLevelPolicyBuilder.build();
+            if (apiLevelPolicyContent != null) {
                 ApiPoliciesCreateOrUpdateResponse response = manager.serviceClient().getApiPolicies().
                         createOrUpdateWithResponse(resourceGroup, serviceName, apiContract.name(), PolicyIdName.POLICY,
                                 new PolicyContractInner().withFormat(PolicyContentFormat.XML)
-                                        .withValue(corsPolicyContent), "*", Context.NONE);
+                                        .withValue(apiLevelPolicyContent), "*", Context.NONE);
                 if (response.getStatusCode() / 100 != 2) {
                     String errBody = response.getValue().value();
                     log.error("Failed to attach CORS policy: HTTP " + response.getStatusCode() + " body=" + errBody);
                     throw new APIManagementException("Failed to attach CORS policy: HTTP " + response.getStatusCode()
                             + " body=" + errBody);
+                }
+            }
+
+            // Configure Operation level policies
+            IterableStream<OperationContract> operationContracts =
+                    manager.apiOperations().listByApi(resourceGroup, serviceName, apiContract.name());
+
+            for (URITemplate resource : api.getUriTemplates()) {
+                for (OperationPolicy policy : resource.getOperationPolicies()) {
+                    if (policy.getPolicyName().equals(AzureConstants.AZURE_OPERATION_POLICY_NAME)) {
+                        AzurePolicyBuilder operationLevelPolicyBuilder =
+                                policyBuilderFactory.newPolicyBuilder();
+                        String openIdURL = policy.getParameters()
+                                .get(AzureConstants.AZURE_OPERATION_POLICY_PARAMETER_OPENID_URL).toString();
+                        operationLevelPolicyBuilder.addPolicy(new AzureJWTPolicy(openIdURL));
+                        String operationLevelPolicyContent = operationLevelPolicyBuilder.build();
+
+                        PolicyContractInner resourceLevelJWTPolicy = new PolicyContractInner()
+                                .withFormat(PolicyContentFormat.XML)
+                                .withValue(operationLevelPolicyContent);
+
+                        String operationId = null;
+                        for (OperationContract operationContract : operationContracts) {
+                            if (operationContract.method().equals(resource.getHTTPVerb()) &&
+                                operationContract.urlTemplate().equals(resource.getUriTemplate())) {
+                                operationId = operationContract.name();
+                            }
+                        }
+                        if (operationId == null) {
+                            throw new APIManagementException("Azure API operation not found for resource: " +
+                                    resource.getUriTemplate());
+                        }
+
+                        ApiOperationPoliciesCreateOrUpdateResponse response = manager.serviceClient()
+                                .getApiOperationPolicies().createOrUpdateWithResponse(resourceGroup, serviceName,
+                                        apiContract.name(), operationId, PolicyIdName.POLICY, resourceLevelJWTPolicy,
+                                        "*", Context.NONE);
+                    }
                 }
             }
 
@@ -202,105 +200,25 @@ public class AzureAPIUtil {
 
             JsonObject referenceArtifact = new JsonObject();
             referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_UUID, api.getUuid());
-            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_PATH, api.getContext());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_CONTEXT, api.getContext());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_ID, apiContract.id());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_ARTIFACT_TYPE, apiContract.type());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_DISPLAY_NAME,
+                    apiContract.displayName());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_VERSION, apiContract.apiVersion());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_PATH, apiContract.path());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_SERVICE_URL,
+                    apiContract.serviceUrl());
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_VERSION_SET_ID,
+                    apiContract.apiVersionSetId());
+            referenceArtifact.addProperty(
+                    AzureConstants.AZURE_EXTERNAL_REFERENCE_VERSIONING_SCHEME,
+                    versionSetContract.versioningScheme().toString());
             Gson gson = new Gson();
             return gson.toJson(referenceArtifact);
         } catch (Exception e) {
             throw new APIManagementException("Error while deploying API to Azure Gateway: " + api.getId(), e);
         }
-    }
-
-    private static String attachPolicyToParentPolicy(String parentPolicy, String policyToAttach)
-            throws APIManagementException {
-        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        dbf.setNamespaceAware(false);
-        dbf.setIgnoringComments(false);
-        dbf.setCoalescing(true);
-        dbf.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        dbf.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-        try {
-            dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        } catch (ParserConfigurationException e) {
-            if (log.isDebugEnabled()) {
-                log.debug("Disabling doctype declaration feature is not supported by the XML parser.", e);
-            }
-        }
-        DocumentBuilder db;
-
-        try {
-            db = dbf.newDocumentBuilder();
-
-            Document parentPolicyDoc;
-            try (InputStream parentPolicyStream =
-                         new ByteArrayInputStream(parentPolicy.getBytes(StandardCharsets.UTF_8))) {
-                parentPolicyDoc = db.parse(parentPolicyStream);
-            } catch (Exception e) {
-                throw new APIManagementException("Error parsing parent policy XML.", e);
-            }
-
-            Element inbound = firstElementByTagName(parentPolicyDoc.getDocumentElement(), "inbound");
-            if (inbound == null) {
-                throw new APIManagementException("Invalid policy:<inbound> section not found in parent policy.");
-            }
-
-            Element cors = firstChildElementByTagName(inbound, "cors");
-            if (cors == null) {
-                throw new APIManagementException("Invalid policy:<cors> section not found in parent policy. ");
-            }
-
-            Document jwtDoc = db.parse(new InputSource(new StringReader("<wrap>" + policyToAttach + "</wrap>")));
-            Element jwtRoot = jwtDoc.getDocumentElement();
-            Node jwtElem = firstChildElement(jwtRoot);
-            if (jwtElem == null) {
-                throw new APIManagementException("Invalid policy: Child policy is empty.");
-            }
-            Node importedJwt = parentPolicyDoc.importNode(jwtElem, true);
-
-            // Insert right AFTER the <cors> element
-            Node next = cors.getNextSibling();
-            inbound.insertBefore(importedJwt, next); // if next == null, appends at end
-
-            TransformerFactory tf = TransformerFactory.newInstance();
-            Transformer t = tf.newTransformer();
-            t.setOutputProperty(OutputKeys.INDENT, "yes");
-            t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            t.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
-            StringWriter sw = new StringWriter();
-            t.transform(new DOMSource(parentPolicyDoc), new StreamResult(sw));
-            return sw.toString();
-
-        } catch (Exception e) {
-            throw new APIManagementException("Error attaching Policy to parent policy.", e);
-        }
-    }
-
-    private static Element firstElementByTagName(Element parent, String name) {
-        NodeList nl = parent.getElementsByTagName(name);
-        for (int i = 0; i < nl.getLength(); i++) {
-            Node n = nl.item(i);
-            if (n.getParentNode() == parent && n.getNodeType() == Node.ELEMENT_NODE) {
-                return (Element) n;
-            }
-        }
-        return null;
-    }
-
-    private static Element firstChildElementByTagName(Element parent, String tagName) {
-        for (Node n = parent.getFirstChild(); n != null; n = n.getNextSibling()) {
-            if (n.getNodeType() == Node.ELEMENT_NODE && tagName.equalsIgnoreCase(n.getNodeName())) {
-                return (Element) n;
-            }
-        }
-        return null;
-    }
-
-    private static Element firstChildElement(Element parent) {
-        for (Node n = parent.getFirstChild(); n != null; n = n.getNextSibling()) {
-            if (n.getNodeType() == Node.ELEMENT_NODE) {
-                return (Element) n;
-            }
-        }
-        return null;
     }
 
     private static String getContextWithoutVersion (String contextWithVersion, String version) {
@@ -384,14 +302,20 @@ public class AzureAPIUtil {
     public static API restAPItoAPI(ApiContract apiContract, String apiDefinition, String organization,
                                    Environment environment) {
         APIIdentifier apiIdentifier = new APIIdentifier("admin", apiContract.displayName(),
-                apiContract.apiVersion() != null ? apiContract.apiVersion() : "default");
+                apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0");
 
         API api = new API(apiIdentifier);
+
+        String context = "/";
+        context += apiContract.path().isEmpty() ? api.getId().getApiName() : apiContract.path();
+        String contextTemplate = context + "/{version}";
+        context += "/" + apiIdentifier.getVersion();
+
         api.setDisplayName(apiContract.displayName());
         api.setUuid(UUID.randomUUID().toString());
         api.setDescription(apiContract.description());
-        api.setContext("/" + apiContract.path() + "/" + apiIdentifier.getVersion());
-        api.setContextTemplate("/" + apiContract.path() + "/{version}");
+        api.setContext(context);
+        api.setContextTemplate(contextTemplate);
         api.setOrganization(organization);
         api.setSwaggerDefinition(apiDefinition);
         api.setRevision(false);

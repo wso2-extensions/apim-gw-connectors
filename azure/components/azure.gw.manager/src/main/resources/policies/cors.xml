@@ -1,0 +1,10 @@
+<cors allow-credentials="false" terminate-unmatched-request="false">
+    <allowed-origins>
+    </allowed-origins>
+
+    <allowed-methods>
+    </allowed-methods>
+
+    <allowed-headers>
+    </allowed-headers>
+</cors>
