@@ -1,15 +1,26 @@
 {
   "AWS": {
-    "apiTypes": ["rest"],
+    "apiTypes": [
+      "rest"
+    ],
     "gatewayFeatures": {
       "basic": [],
-      "runtime": ["transportsHTTP", "transportsHTTPS", "oauth2"],
+      "runtime": [
+        "transportsHTTP",
+        "transportsHTTPS",
+        "oauth2"
+      ],
       "resources": [],
       "localScopes": [],
-      "policies": ["policies"],
+      "policies": [
+        "policies"
+      ],
       "monetization": [],
       "subscriptions": [],
-      "endpoints": ["http", "typePRODUCTION"],
+      "endpoints": [
+        "http",
+        "typePRODUCTION"
+      ],
       "endpointSecurity": [],
       "tryout": []
     }

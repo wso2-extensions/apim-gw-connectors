@@ -1,0 +1,34 @@
+{
+  "Envoy": {
+    "apiTypes": [
+      "rest"
+    ],
+    "gatewayFeatures": {
+      "basic": [],
+      "runtime": [
+        "cors",
+        "transportsHTTP",
+        "transportsHTTPS",
+        "oauth2",
+        "apikey",
+        "basic",
+        "keyManagerConfig"
+      ],
+      "resources": [
+        "apiLevelRateLimiting",
+        "operationLevelRateLimiting",
+        "operationSecurity"
+      ],
+      "localScopes": [],
+      "policies": [],
+      "monetization": [],
+      "subscriptions": [],
+      "endpoints": [
+        "typePRODUCTION",
+        "typeSANDBOX"
+      ],
+      "endpointSecurity": [],
+      "tryout": []
+    }
+  }
+}

@@ -35,3 +35,5 @@ arm64/
 # Gradle build artifacts
 .gradle/
 build/
+
+target
