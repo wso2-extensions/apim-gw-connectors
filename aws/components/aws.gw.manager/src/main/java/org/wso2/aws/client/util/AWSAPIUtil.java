@@ -40,6 +40,7 @@ import software.amazon.awssdk.services.apigateway.model.Authorizer;
 import software.amazon.awssdk.services.apigateway.model.CreateDeploymentRequest;
 import software.amazon.awssdk.services.apigateway.model.CreateDeploymentResponse;
 import software.amazon.awssdk.services.apigateway.model.DeleteDeploymentRequest;
+import software.amazon.awssdk.services.apigateway.model.DeleteRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.DeleteStageRequest;
 import software.amazon.awssdk.services.apigateway.model.Deployment;
 import software.amazon.awssdk.services.apigateway.model.GetAuthorizersRequest;
@@ -54,6 +55,7 @@ import software.amazon.awssdk.services.apigateway.model.GetMethodResponse;
 import software.amazon.awssdk.services.apigateway.model.GetResourcesRequest;
 import software.amazon.awssdk.services.apigateway.model.GetResourcesResponse;
 import software.amazon.awssdk.services.apigateway.model.GetRestApiRequest;
+import software.amazon.awssdk.services.apigateway.model.GetRestApiResponse;
 import software.amazon.awssdk.services.apigateway.model.GetRestApisRequest;
 import software.amazon.awssdk.services.apigateway.model.GetRestApisResponse;
 import software.amazon.awssdk.services.apigateway.model.GetStagesRequest;
@@ -201,7 +203,8 @@ public class AWSAPIUtil {
                             int endIndex = key.indexOf('.', startIndex);
                             String location = key.substring(startIndex, endIndex != -1 ? endIndex : key.length());
 
-                            requestParametersToBeAddedInIntegration.put("integration.request." + location + "." + paramName,
+                            requestParametersToBeAddedInIntegration.put(
+                                    "integration.request." + location + "." + paramName,
                                     "method.request." + location + "." + paramName);
                         }
 
@@ -420,7 +423,8 @@ public class AWSAPIUtil {
                             int endIndex = key.indexOf('.', startIndex);
                             String location = key.substring(startIndex, endIndex != -1 ? endIndex : key.length());
 
-                            requestParametersToBeAddedInIntegration.put("integration.request." + location + "." + paramName,
+                            requestParametersToBeAddedInIntegration.put(
+                                    "integration.request." + location + "." + paramName,
                                     "method.request." + location + "." + paramName);
                         }
 
@@ -508,28 +512,30 @@ public class AWSAPIUtil {
         }
     }
 
-    public static boolean deleteDeployment(String referenceArtifact, ApiGatewayClient apiGatewayClient, String stage)
+    public static void deleteDeployment(String referenceArtifact, ApiGatewayClient apiGatewayClient, String stage)
             throws APIManagementException {
         String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(referenceArtifact);
-
-        // Delete the stage before deleting the deployment
-        DeleteStageRequest deleteStageRequest = DeleteStageRequest.builder()
-                .restApiId(awsApiId)
-                .stageName(stage)
-                .build();
-        apiGatewayClient.deleteStage(deleteStageRequest);
-
-        GetDeploymentsRequest getDeploymentsRequest = GetDeploymentsRequest.builder().restApiId(awsApiId).build();
-        GetDeploymentsResponse getDeploymentsResponse = apiGatewayClient.getDeployments(getDeploymentsRequest);
-        List<Deployment> deployments = getDeploymentsResponse.items();
-        for (Deployment deployment : deployments) {
-            DeleteDeploymentRequest deleteDeploymentRequest = DeleteDeploymentRequest.builder()
-                    .deploymentId(deployment.id())
+        GetStagesRequest getStagesRequest = GetStagesRequest.builder().restApiId(awsApiId).build();
+        GetStagesResponse getStagesResponse = apiGatewayClient.getStages(getStagesRequest);
+        if (getStagesResponse.item() != null && !getStagesResponse.item().isEmpty()) {
+            // Delete the stage before deleting the deployment
+            DeleteStageRequest deleteStageRequest = DeleteStageRequest.builder()
                     .restApiId(awsApiId)
+                    .stageName(stage)
                     .build();
-            apiGatewayClient.deleteDeployment(deleteDeploymentRequest);
+            apiGatewayClient.deleteStage(deleteStageRequest);
+
+            GetDeploymentsRequest getDeploymentsRequest = GetDeploymentsRequest.builder().restApiId(awsApiId).build();
+            GetDeploymentsResponse getDeploymentsResponse = apiGatewayClient.getDeployments(getDeploymentsRequest);
+            List<Deployment> deployments = getDeploymentsResponse.items();
+            for (Deployment deployment : deployments) {
+                DeleteDeploymentRequest deleteDeploymentRequest = DeleteDeploymentRequest.builder()
+                        .deploymentId(deployment.id())
+                        .restApiId(awsApiId)
+                        .build();
+                apiGatewayClient.deleteDeployment(deleteDeploymentRequest);
+            }
         }
-        return true;
     }
 
     /**
@@ -583,10 +589,10 @@ public class AWSAPIUtil {
     /**
      * Converts a RestApi object to an API object.
      *
-     * @param restApi         The RestApi object to convert.
-     * @param apiDefinition   The OpenAPI definition of the API.
-     * @param organization    The organization name.
-     * @param environment     The environment in which the API is deployed.
+     * @param restApi       The RestApi object to convert.
+     * @param apiDefinition The OpenAPI definition of the API.
+     * @param organization  The organization name.
+     * @param environment   The environment in which the API is deployed.
      * @return An API object representing the RestApi.
      */
     public static API restAPItoAPI(RestApi restApi, String apiDefinition, String organization,
@@ -615,9 +621,9 @@ public class AWSAPIUtil {
     /**
      * Sets the endpoint configuration for the API based on the provided RestApi.
      *
-     * @param api      The API object to set the endpoint configuration for.
-     * @param restApi  The RestApi object containing endpoint information.
-     * @param client   The ApiGatewayClient to interact with AWS API Gateway.
+     * @param api     The API object to set the endpoint configuration for.
+     * @param restApi The RestApi object containing endpoint information.
+     * @param client  The ApiGatewayClient to interact with AWS API Gateway.
      */
     public static void setEndpointConfig(API api, RestApi restApi, ApiGatewayClient client) {
         String restApiId = restApi.id();
@@ -667,7 +673,7 @@ public class AWSAPIUtil {
     /**
      * Creates a reference artifact by combining a given RestApi object and its Swagger definition in JSON format.
      *
-     * @param restApi The RestApi object containing API details.
+     * @param restApi               The RestApi object containing API details.
      * @param swaggerDefinitionJson The Swagger/OpenAPI definition of the API in JSON format.
      * @return A JSON string that represents the combined reference artifact.
      */
@@ -677,5 +683,21 @@ public class AWSAPIUtil {
         arr.add(G.toJsonTree(restApi));
         arr.add(JsonParser.parseString(swaggerDefinitionJson));
         return G.toJson(arr);
+    }
+
+    /**
+     * Deletes a Rest API from AWS API Gateway using its external reference (API ID).
+     *
+     * @param externalReference The external reference (API ID) of the Rest API to be deleted.
+     * @param apiGatewayClient  The ApiGatewayClient instance used to interact with AWS API Gateway.
+     */
+    public static void deleteAPI(String externalReference, ApiGatewayClient apiGatewayClient)
+            throws APIManagementException {
+        String referenceArtifact = GatewayUtil.getAWSApiIdFromReferenceArtifact(externalReference);
+        GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(referenceArtifact).build();
+        GetRestApiResponse restApi = apiGatewayClient.getRestApi(getRestApiRequest);
+        if (restApi != null) {
+            apiGatewayClient.deleteRestApi(DeleteRestApiRequest.builder().restApiId(referenceArtifact).build());
+        }
     }
 }
