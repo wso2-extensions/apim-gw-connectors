@@ -1,0 +1,1 @@
+This contains the Envoy Gateway ControlPlane Connector implementation for Gateway Federation.
