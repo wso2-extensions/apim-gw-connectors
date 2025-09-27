@@ -81,9 +81,17 @@ public class AWSGatewayDeployer implements GatewayDeployer {
     }
 
     @Override
-    public boolean undeploy(String externalReference) throws APIManagementException {
-        return AWSAPIUtil.deleteDeployment(externalReference, apiGatewayClient, stage);
+    public boolean undeploy(String externalReference, boolean delete) throws APIManagementException {
+        AWSAPIUtil.deleteDeployment(externalReference, apiGatewayClient, stage);
+        if (delete){
+            AWSAPIUtil.deleteAPI(externalReference,apiGatewayClient);
+        }
+        return true;
+    }
 
+    @Override
+    public boolean undeploy(String externalReference) throws APIManagementException {
+        return true;
     }
 
     @Override
