@@ -50,7 +50,7 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
 
     @Override
     public String getGatewayDeployerImplementation() {
-        return KongGatewayDeployer.class.getName();
+        return null;
     }
 
     @Override

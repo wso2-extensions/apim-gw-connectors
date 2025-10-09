@@ -49,7 +49,7 @@ public class EnvoyGatewayConfiguration implements GatewayAgentConfiguration {
 
     @Override
     public String getGatewayDeployerImplementation() {
-        return EnvoyGatewayDeployer.class.getName();
+        return null;
     }
 
     @Override
