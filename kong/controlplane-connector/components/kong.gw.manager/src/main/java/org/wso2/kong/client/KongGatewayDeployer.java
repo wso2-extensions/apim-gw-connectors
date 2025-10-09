@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package org.wso2.envoy.client;
+package org.wso2.kong.client;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,23 +29,23 @@ import org.wso2.carbon.apimgt.api.model.GatewayDeployer;
 import java.util.Collections;
 
 /**
- * This class controls the API artifact deployments on the Envoy Gateway.
+ * This class controls the API artifact deployments on the Kong Gateway.
  */
-public class EnvoyGatewayDeployer implements GatewayDeployer {
-    private static final Log log = LogFactory.getLog(org.wso2.envoy.client.EnvoyGatewayDeployer.class);
+public class KongGatewayDeployer implements GatewayDeployer {
+    private static final Log log = LogFactory.getLog(org.wso2.kong.client.KongGatewayDeployer.class);
     private Environment environment;
     private String controlPlaneId;
     private String authToken;
 
     @Override
     public void init(Environment environment) throws APIManagementException {
-        log.debug("Initializing Envoy Gateway Deployer for environment: " + environment.getName());
+        log.debug("Initializing Kong Gateway Deployer for environment: " + environment.getName());
         this.environment = environment;
     }
 
     @Override
     public String getType() {
-        return EnvoyConstants.ENVOY_TYPE;
+        return KongConstants.KONG_TYPE;
     }
 
     @Override
