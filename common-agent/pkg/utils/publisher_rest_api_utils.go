@@ -304,6 +304,9 @@ func DeleteAPIRevision(apiUUID string, revisionID string, body string) (bool, er
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusAccepted, http.StatusNoContent, http.StatusCreated:
 		// proceed
+	case http.StatusBadRequest:
+		// lets proceed it might be the revision is already undeployed
+		logger.LoggerTLSUtils.Debugf("Received Bad request while undeploying the revision. Proceeding to delete the revision. Response body: %s", string(respBody))
 	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests:
 		return true, fmt.Errorf("undeploy revision returned retryable status %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	default:
