@@ -1,0 +1,67 @@
+# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com) All Rights Reserved.
+#
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+wso2:
+  subscription:
+    imagePullSecrets: ""
+replicaCount: 1
+image:
+  repository: wso2/apim-k8s-common-gw-connector
+  tag: 1.0.0-beta
+  pullPolicy: Always
+service:
+  name: apim-common-agent-service
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "456Mi"
+    cpu: "200m"
+controlPlane:
+  enabled: true
+  serviceURL: https://apim-wso2am-acp-1-service.default.svc.cluster.local:9443/ # change the ns to the appropriate ns
+  username: admin
+  password: admin
+  environmentLabels: EG
+  skipSSLVerification: true
+  eventListeningEndpoints: amqp://admin:admin@apim-wso2am-acp-1-service.default.svc.cluster.local:5672?retries='10'&connectdelay='30'  # change the ns to the appropriate ns
+  # internalKeyIssuer: http://am.wso2.com:443/token
+  certificates:
+    # -- APIM CA certificate secret name
+    caCertSecretName: "apim-ca-certificate" 
+dataPlane:
+  enabled: true
+  k8ResourceEndpoint: https://apk-wso2-kgw-config-ds-service.default.svc.cluster.local:9443/api/configurator/apis/generate-k8s-resources # change the ns to the appropriate ns
+  namespace: default # change the ns to the appropriate ns
+metrics:
+  enabled: false
+agent:
+  mode: CPtoDP
+  gateway: eg
+certmanager:
+  enabled: true
+logging:
+  level: "DEBG" # LogLevels can be "DEBG", "FATL", "ERRO", "WARN", "INFO", "PANC"
+  format: "TEXT" # Values can be "JSON", "TEXT"
+serviceAccount:
+  enableServiceAccountCreation: true
+  enableClusterRoleCreation: true
+  serviceAccountName: wso2agent-platform
+  roleName: wso2agent-role
+gatewayAgent:
+  sandboxURLLabel: "sandbox"
+  productionURLLabel: ""
