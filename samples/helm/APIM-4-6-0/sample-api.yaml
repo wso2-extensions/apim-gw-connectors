@@ -70,34 +70,11 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
 
-
-
-
-
-
-
----
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: BackendTrafficPolicy
-metadata:
-  name: backend-traffic-policy
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: backend-1
-  rateLimit:
-    type: Local
-    local:
-      rules:
-        - limit:
-            requests: 10000
-            unit: Minute
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: backend-1
+  name: EchoME
   labels:
     check: "true"
 spec:
@@ -128,7 +105,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: backend-1
+    name: EchoME
   rateLimit:
     type: Local
     local:
@@ -145,7 +122,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: backend-1
+    name: EchoME
   jwt:
     providers:
     - name: HELLO111
