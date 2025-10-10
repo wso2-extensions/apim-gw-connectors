@@ -19,8 +19,8 @@ wso2:
     imagePullSecrets: ""
 replicaCount: 1
 image:
-  repository: wso2/apim-k8s-gw-connector
-  tag: 2.0.0-alpha
+  repository: wso2/apim-k8s-common-gw-connector
+  tag: 1.0.0-beta
   pullPolicy: Always
 service:
   name: apim-agent-service
@@ -50,7 +50,7 @@ metrics:
   enabled: false
 agent:
   mode: CPtoDP
-  gateway: apk
+  gateway: eg
 certmanager:
   enabled: true
 serviceAccount:
