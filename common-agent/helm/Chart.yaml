@@ -18,8 +18,8 @@ apiVersion: v2
 name: apim-k8s-common-gw-helm
 description: A Helm chart for deploying apim-gw-connector
 type: application
-version: 1.0.0-beta
-appVersion: "1.0.0-beta"
+version: 1.0.0-rc
+appVersion: "1.0.0-rc"
 dependencies:
   - name: cert-manager
     version: "v1.18.2"
