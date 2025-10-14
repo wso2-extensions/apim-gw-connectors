@@ -154,10 +154,6 @@ github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/messaging/no
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/messaging/notification_listener.go:97.89,99.25 2 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/messaging/notification_listener.go:99.25,102.3 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/messaging/notification_listener.go:103.2,103.21 1 0
-github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:27.13,29.26 2 0
-github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:29.26,31.3 1 0
-github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:32.2,32.17 1 0
-github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:36.26,38.2 1 1
 github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/cache/km_cache.go:49.52,50.17 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/cache/km_cache.go:50.17,55.3 2 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/cache/km_cache.go:56.2,56.24 1 0
@@ -421,6 +417,10 @@ github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/k8s-resource-lib/
 github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/k8s-resource-lib/examples/http/main.go:49.61,51.17 2 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/k8s-resource-lib/examples/http/main.go:51.17,53.4 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/pkg/k8s-resource-lib/examples/http/main.go:54.3,62.40 8 0
+github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:27.13,29.26 2 0
+github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:29.26,31.3 1 0
+github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:32.2,32.17 1 0
+github.com/wso2-extensions/apim-gw-connectors/common-agent/main.go:36.26,38.2 1 1
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/logging/logging_utils.go:27.45,29.9 2 3
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/logging/logging_utils.go:29.9,31.3 1 1
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/logging/logging_utils.go:32.2,32.25 1 2
