@@ -308,7 +308,7 @@ kubectl get KongPlugins -n kong
 kubectl get secrets -n kong
 ```
 
-### Step 9: Discover API
+### Step 5: Discover API
 
 For testing with pre-built Custom Resources:
 
@@ -354,7 +354,7 @@ kubectl get kongplugins,kongconsumers,httproutes,services -n kong
 kubectl get events -n kong --sort-by='.lastTimestamp'
 ```
 
-### Step 10: API Console Testing
+### Step 6: API Console Testing
 
 #### Generate and Test Access Token
 1. **Get Access Token**: 
