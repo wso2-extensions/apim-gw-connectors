@@ -353,14 +353,32 @@ kubectl get kongplugins,kongconsumers,httproutes,services -n kong
 # Event monitoring
 kubectl get events -n kong --sort-by='.lastTimestamp'
 ```
-### Step 10: Test API Invocation
 
-1. **Generate Token**: Get OAuth2 token from application
-2. **Test API**:
-   ```bash
-   curl -X GET https://kong.wso2.com/commentsApiContext/1/api/v1/comments \
-     -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-   ```
+### Step 10: API Console Testing
+
+#### Generate and Test Access Token
+1. **Get Access Token**: 
+   - Navigate to **OAuth2 Tokens** under **Production Keys** in your application
+   - Click **GENERATE ACCESS TOKEN** → **Generate** → Copy the token
+
+2. **API Console Test**:
+   - Go to subscribed API in Dev Portal
+   - Navigate to **API Console** under **Try Out** section
+   - Paste token in **Authorization Header Value** field
+   - Click **Try Out** → **Execute**
+
+#### Command Line Testing
+```bash
+# Test Production Environment
+curl -X GET "https://kong.wso2.com/commentsApiContext/1/api/v1/comments" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json"
+# Test CORS Preflight
+curl -X OPTIONS "https://kong.wso2.com/commentsApiContext/1/api/v1/comments" \
+  -H "Origin: https://example.com" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: authorization,content-type"
+```
 
 ## 🔧 Development
 
