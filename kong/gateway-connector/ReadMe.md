@@ -67,7 +67,7 @@ agent:
 ## 🏗️ Kubernetes Implementation Architecture
 
 ### Overview
-To enable multi-gateway support for Kong in Kubernetes, we use a dedicated Kong Gateway Agent. This agent acts as a translator, converting abstract API definitions from a central control plane into concrete Kong configurations and deploying them to your Kubernetes cluster.
+To enable multi-gateway support for Kong in Kubernetes, we use a dedicated Kong Gateway Agent.
 
 ### Key Components
 
@@ -77,28 +77,9 @@ To enable multi-gateway support for Kong in Kubernetes, we use a dedicated Kong 
   - Creating standard Kubernetes resources such as Services, HTTPRoutes
   - Ensuring consistency and reducing duplication across gateway agents
 
-#### Kong Gateway-Specific Agent  
-- **Purpose**: Generate gateway-specific resources and deploy Kubernetes Custom Resources (CRs)
-- **Responsibilities**:
-  - Generating gateway-specific resources like KongPlugin, KongConsumer, etc.
-  - Managing Kubernetes Secrets and related configurations
-  - Handling subscriptions, key management, and gateway-specific logic
-  - Deploying resources in Kubernetes using the Kubernetes Service API
+### API Discovery Flow
 
-### API Deployment Flow
-
-The Kong agent translates API definitions from the control plane into live configurations within a Kubernetes cluster:
-
-1. **Parse API Project**: Agent receives and parses the complete API definition
-2. **Generate Resources**: Creates necessary Kubernetes Custom Resources:
-   - Standard resources: Services, HTTPRoutes (via common agent)
-   - Kong-specific resources: KongPlugins for JWT, ACL, CORS, Rate Limiting
-3. **Handle Configurations**: Manages subscriptions and key management features
-4. **Deploy Resources**: Uses Kubernetes Service API to deploy all generated resources
-
-### Discovery Flow
-
-Discovery works in the opposite direction from deployment, detecting existing API configurations:
+Discovery detects existing API configurations:
 
 #### Reconciliation Loop
 The gateway-specific agent periodically runs discovery and reconciliation:
@@ -282,7 +263,7 @@ sh api-manager.sh -DportOffset=1  # APIM will be on port 9444
    - **Name**: Kong_GW_K8s
    - **Display Name**: Kong Gateway Kubernetes
    - **Type**: Kong Gateway
-   - **Mode**: Read-Write
+   - **Mode**: Read-Only
    - **API Discovery Interval**: 0
    - **Deployment Type**: Kubernetes
    - **Host**: kong.wso2.com
@@ -325,125 +306,6 @@ kubectl get KongPlugins -n kong
 
 # Check secrets for Key Managers
 kubectl get secrets -n kong
-```
-
-### Step 5: Create and Deploy API
-
-#### Create API in Publisher Portal
-1. **Login**: Navigate to `https://localhost:9444/publisher` (admin/admin)
-2. **Create API**: 
-   - **Name**: commentsApi
-   - **Context**: /commentsApiContext
-   - **Version**: 1
-   - **Endpoint**: https://68870560071f195ca97eed8a.mockapi.io
-   - **Gateway**: Kong Gateway
-
-3. **Add Resources**: Add GET `/api/v1/comments` resource
-4. **Deploy**: Deploy to Kong Kubernetes Gateway Environment
-5. **Publish**: Publish the API
-
-#### Verify Kubernetes Resources
-```bash
-# Check HTTPRoutes (4 routes per API)
-kubectl get httproutes -n kong
-
-# Check Services (2 services per environment)
-kubectl get services -n kong
-
-# Check KongPlugins (ACL, JWT, and CORS plugins)
-kubectl get kongplugins -n kong
-```
-
-### Step 6: Test API Consumption
-
-#### Create Application and Subscribe
-1. **Login**: Navigate to `https://localhost:9444/devportal` (admin/admin)
-2. **Create Application**: Create new application and generate keys
-3. **Subscribe**: Subscribe to the API using the application
-
-#### Verify Consumer Resources
-```bash
-# Check KongConsumers (2 per environment)
-kubectl get kongconsumers -n kong
-
-# Check ACL and JWT secrets
-kubectl get secrets -n kong | grep -E "(acl|jwt)"
-```
-
-#### Test API Invocation
-1. **Generate Token**: Get OAuth2 token from application
-2. **Test API**:
-   ```bash
-   curl -X GET https://kong.wso2.com/commentsApiContext/1/api/v1/comments \
-     -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-   ```
-
-### Step 7: Detailed Resource Verification
-
-After API deployment, verify the created Kubernetes resources:
-
-#### HTTPRoutes Created (4 per API)
-```bash
-kubectl get httproutes -n kong
-```
-**Expected Resources**:
-- HTTPRoute with HTTP verb of the resource for **Production**
-- HTTPRoute with **OPTIONS** verb for the resource for **Production** (CORS)
-- HTTPRoute with HTTP verb of the resource for **Sandbox** 
-- HTTPRoute with **OPTIONS** verb for the resource for **Sandbox** (CORS)
-
-#### Services Created (2 per environment)
-```bash
-kubectl get services -n kong
-```
-**Expected Resources**:
-- Service for **Production** environment
-- Service for **Sandbox** environment
-
-#### KongPlugins Created
-```bash
-kubectl get kongplugins -n kong
-```
-**Expected Resources**:
-- `route-acl` - Access Control List KongPlugins for each environment (all APIs are subscription-enabled)
-- `route-jwt` - JWT authentication plugin (if OAuth2 is enabled as Application Level Security)
-- `route-cors` - Default CORS plugin for cross-origin resource sharing support
-
-#### Consumer Resources (Created after Subscription)
-```bash
-kubectl get kongconsumers -n kong
-kubectl get secrets -n kong | grep -E "(acl|jwt)"
-```
-**Expected Resources**:
-- **KongConsumers**: 2 KongConsumers per environment of the application
-- **ACL Secrets**: 2 ACL secrets per environment for API subscription
-- **JWT Secrets**: Created per environment if key generation is done (timing depends on key generation vs subscription order)
-
-### Step 8: API Console Testing
-
-#### Generate and Test Access Token
-1. **Get Access Token**: 
-   - Navigate to **OAuth2 Tokens** under **Production Keys** in your application
-   - Click **GENERATE ACCESS TOKEN** → **Generate** → Copy the token
-
-2. **API Console Test**:
-   - Go to subscribed API in Dev Portal
-   - Navigate to **API Console** under **Try Out** section
-   - Paste token in **Authorization Header Value** field
-   - Click **Try Out** → **Execute**
-
-#### Command Line Testing
-```bash
-# Test Production Environment
-curl -X GET "https://kong.wso2.com/commentsApiContext/1/api/v1/comments" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json"
-
-# Test CORS Preflight
-curl -X OPTIONS "https://kong.wso2.com/commentsApiContext/1/api/v1/comments" \
-  -H "Origin: https://example.com" \
-  -H "Access-Control-Request-Method: GET" \
-  -H "Access-Control-Request-Headers: authorization,content-type"
 ```
 
 ### Step 9: Discover API
@@ -491,6 +353,14 @@ kubectl get kongplugins,kongconsumers,httproutes,services -n kong
 # Event monitoring
 kubectl get events -n kong --sort-by='.lastTimestamp'
 ```
+### Step 10: Test API Invocation
+
+1. **Generate Token**: Get OAuth2 token from application
+2. **Test API**:
+   ```bash
+   curl -X GET https://kong.wso2.com/commentsApiContext/1/api/v1/comments \
+     -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+   ```
 
 ## 🔧 Development
 
