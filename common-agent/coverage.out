@@ -61,6 +61,8 @@ github.com/wso2-extensions/apim-gw-connectors/common-agent/config/types.go:57.32
 github.com/wso2-extensions/apim-gw-connectors/common-agent/config/types.go:58.17,60.3 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/config/types.go:61.2,61.10 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/config/types.go:101.51,103.2 1 0
+github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/loggers/logger.go:50.13,53.2 2 0
+github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/loggers/logger.go:56.22,61.2 4 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/constants.go:55.33,56.48 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/constants.go:56.48,58.3 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/constants.go:59.2,59.30 1 0
@@ -72,8 +74,6 @@ github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/co
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/constants.go:75.51,77.17 2 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/constants.go:77.17,79.4 1 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/constants/constants.go:81.2,81.14 1 0
-github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/loggers/logger.go:50.13,53.2 2 0
-github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/loggers/logger.go:56.22,61.2 4 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/agent/agent.go:71.13,77.2 5 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/agent/agent.go:80.31,83.16 3 0
 github.com/wso2-extensions/apim-gw-connectors/common-agent/internal/agent/agent.go:83.16,86.3 2 0
