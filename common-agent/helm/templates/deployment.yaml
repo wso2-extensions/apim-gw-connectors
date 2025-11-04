@@ -68,6 +68,8 @@ spec:
               name: "debug-port"
             {{- end }}
           env:
+            - name: APIM_AGENT_NAME
+              value: {{ .Values.agent.gateway }}
             - name: APIM_AGENT_PRIVATE_KEY_PATH
               value: /home/wso2/security/keystore/common-agent.key
             - name: APIM_AGENT_PUBLIC_CERT_PATH
