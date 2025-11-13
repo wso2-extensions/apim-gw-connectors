@@ -119,7 +119,7 @@
         <project.scm.id>scm-server</project.scm.id>
         <carbon.p2.plugin.version>1.5.3</carbon.p2.plugin.version>
         <carbon.apimgt.version>9.32.74</carbon.apimgt.version>
-        <org.wso2.orbit.software.amazon.awssdk.version>2.30.22.wso2v1</org.wso2.orbit.software.amazon.awssdk.version>
+        <org.wso2.orbit.software.amazon.awssdk.version>2.30.22.wso2v2</org.wso2.orbit.software.amazon.awssdk.version>
         <software.amazon.awssdk.version.range>[2.20, 2.50]</software.amazon.awssdk.version.range>
         <netty.version>4.1.118.Final</netty.version>
     </properties>
