@@ -28,6 +28,8 @@ import org.wso2.carbon.apimgt.api.model.GatewayDeployer;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.http.SdkHttpClient;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -73,18 +75,26 @@ public class AWSGatewayDeployer implements GatewayDeployer {
 
     @Override
     public String deploy(API api, String externalReference) throws APIManagementException {
-        if (externalReference == null) {
-            return AWSAPIUtil.importRestAPI(api, apiGatewayClient, region, stage);
-        } else {
-            return AWSAPIUtil.reimportRestAPI(externalReference, api, apiGatewayClient, region, stage);
+        try {
+            if (externalReference == null) {
+                return AWSAPIUtil.importRestAPI(api, apiGatewayClient, region, stage);
+            } else {
+                return AWSAPIUtil.reimportRestAPI(externalReference, api, apiGatewayClient, region, stage);
+            }
+        } catch (SdkException e) {
+            throw new APIManagementException("Error occurred while deploying the API to AWS API Gateway", e);
         }
     }
 
     @Override
     public boolean undeploy(String externalReference, boolean delete) throws APIManagementException {
-        AWSAPIUtil.deleteDeployment(externalReference, apiGatewayClient, stage);
-        if (delete) {
-            AWSAPIUtil.deleteAPI(externalReference, apiGatewayClient);
+        try {
+            AWSAPIUtil.deleteDeployment(externalReference, apiGatewayClient, stage);
+            if (delete) {
+                AWSAPIUtil.deleteAPI(externalReference, apiGatewayClient);
+            }
+        } catch (SdkException e) {
+            throw new APIManagementException("Error occurred while undeploy the API to AWS API Gateway", e);
         }
         return true;
     }
