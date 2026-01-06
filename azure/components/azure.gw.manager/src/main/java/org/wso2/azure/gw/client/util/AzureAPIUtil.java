@@ -408,19 +408,79 @@ public class AzureAPIUtil {
         api.setGatewayType(environment.getGatewayType());
         if (apiContract.serviceUrl() != null) {
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    apiContract.serviceUrl(), apiContract.serviceUrl(), false));
+                    apiContract.serviceUrl(), apiContract.serviceUrl(), false, false));
         }
         api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
         return api;
+    }
+
+ 
+    /**websocket API to wso2 API*/
+    public static API websocketAPIToAPI(ApiContract apiContract, String organization,
+                                        Environment environment) {
+        APIIdentifier apiIdentifier = new APIIdentifier(
+            "admin",
+            apiContract.displayName(),
+            apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0"
+    );                                        
+        API api = new API(apiIdentifier); 
+
+        String context = "/";
+        context += apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
+        String contextTemplate = context;
+
+        api.setDisplayName(apiContract.displayName());
+        api.setUuid(UUID.randomUUID().toString());
+        api.setDescription(apiContract.description());
+        api.setContext(context);
+        api.setContextTemplate(contextTemplate);
+        api.setOrganization(organization);
+        api.setRevision(false);
+        api.setInitiatedFromGateway(true);
+        api.setGatewayVendor("external");
+        api.setGatewayType(environment.getGatewayType());
+        api.setType("WS");
+        api.setTransports("ws,wss");
+        String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion());
+
+
+        api.setAsyncApiDefinition(asyncApiDefinition);
+        api.setSwaggerDefinition(asyncApiDefinition);
+        if (apiContract.serviceUrl() != null) {
+            api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
+                    apiContract.serviceUrl(), apiContract.serviceUrl(), false, true));
+        }
+        api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
+        return api; 
     }
 
     /**
      * Build endpointConfig JSON using Gson.
      * Both production and sandbox endpoints are included.
      */
-    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver) {
+
+    private static String loadAsyncApiTemplate(String title, String version) {
+
+        try (java.io.InputStream inputStream = AzureAPIUtil.class.getClassLoader()
+                .getResourceAsStream("asyncapi-template.json")) {
+            if (inputStream == null) {
+                log.error("AsyncAPI template file not found in resources");
+                return null;
+            }
+            try (java.util.Scanner scanner = new java.util.Scanner(inputStream, "UTF-8")) {
+                String content = scanner.useDelimiter("\\A").next();
+                return content.replace("${TITLE}", title)
+                        .replace("${VERSION}", version);
+            }
+        } catch (java.io.IOException e) {
+            log.error("Error loading AsyncAPI template", e);
+            return null;
+        }
+    }
+
+    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver, boolean isWebSocket) {
         JsonObject endpointConfig = new JsonObject();
-        endpointConfig.addProperty("endpoint_type", "http");
+        endpointConfig.addProperty("endpoint_type", isWebSocket ? "ws" : "http");
         endpointConfig.addProperty("failOver", failOver);
 
         JsonObject prod = new JsonObject();
