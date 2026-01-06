@@ -442,32 +442,8 @@ public class AzureAPIUtil {
         api.setGatewayType(environment.getGatewayType());
         api.setType("WS");
         api.setTransports("ws,wss");
-        String asyncApiDefinition =
-                "{\n" +
-                "  \"asyncapi\": \"2.0.0\",\n" +
-                "  \"info\": {\n" +
-                "    \"title\": \"" + apiContract.displayName() + "\",\n" +
-                "    \"version\": \"" + apiIdentifier.getVersion() + "\"\n" +
-                "  },\n" +
-                "  \"channels\": {\n" +
-                "    \"/*\": {\n" +  
-                "      \"subscribe\": {\n" +
-                "        \"message\": {\n" +
-                "          \"payload\": {\n" +
-                "            \"type\": \"object\"\n" +
-                "          }\n" +
-                "        }\n" +
-                "      },\n" +
-                "      \"publish\": {\n" +
-                "        \"message\": {\n" +
-                "          \"payload\": {\n" +
-                "            \"type\": \"object\"\n" +
-                "          }\n" +
-                "        }\n" +
-                "      }\n" +
-                "    }\n" +
-                "  }\n" +
-                "}";
+        String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion());
+
 
         api.setAsyncApiDefinition(asyncApiDefinition);
         api.setSwaggerDefinition(asyncApiDefinition);
@@ -485,6 +461,26 @@ public class AzureAPIUtil {
      * Build endpointConfig JSON using Gson.
      * Both production and sandbox endpoints are included.
      */
+
+    private static String loadAsyncApiTemplate(String title, String version) {
+
+        try (java.io.InputStream inputStream = AzureAPIUtil.class.getClassLoader()
+                .getResourceAsStream("asyncapi-template.json")) {
+            if (inputStream == null) {
+                log.error("AsyncAPI template file not found in resources");
+                return null;
+            }
+            try (java.util.Scanner scanner = new java.util.Scanner(inputStream, "UTF-8")) {
+                String content = scanner.useDelimiter("\\A").next();
+                return content.replace("${TITLE}", title)
+                        .replace("${VERSION}", version);
+            }
+        } catch (java.io.IOException e) {
+            log.error("Error loading AsyncAPI template", e);
+            return null;
+        }
+    }
+
     public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver, boolean isWebSocket) {
         JsonObject endpointConfig = new JsonObject();
         endpointConfig.addProperty("endpoint_type", isWebSocket ? "ws" : "http");

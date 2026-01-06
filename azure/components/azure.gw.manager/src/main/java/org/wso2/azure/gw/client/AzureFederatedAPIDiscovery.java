@@ -125,7 +125,7 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
             try {
                 API apiArtifact = null;
                 // Get API
-                if (api.apiType() == ApiType.WEBSOCKET){
+                if (ApiType.WEBSOCKET.equals(api.apiType())){
                     apiArtifact = AzureAPIUtil.websocketAPIToAPI(api, organization, environment);
                 }
                 else{
