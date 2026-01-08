@@ -130,6 +130,15 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
                 }
                 else{
                     String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
+                    if (!AzureAPIUtil.hasResources(apiDefinition)) {
+                        log.warn("Skipping API '" + api.displayName() + "' (" + api.name() 
+                                + ") - API definition contains no resources/paths");
+                        System.out.println(
+                            "Skipping API '" + api.displayName() + "' (" + api.name()
+                            + ") - API definition contains no resources/paths"
+                        );
+                        continue;
+                    }
                     apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
                 }
 

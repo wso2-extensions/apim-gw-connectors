@@ -415,7 +415,9 @@ public class AzureAPIUtil {
     }
 
  
-    /**websocket API to wso2 API*/
+    /**
+     * websocket API to wso2 API.
+     */
     public static API websocketAPIToAPI(ApiContract apiContract, String organization,
                                         Environment environment) {
         APIIdentifier apiIdentifier = new APIIdentifier(
@@ -443,7 +445,7 @@ public class AzureAPIUtil {
         api.setType("WS");
         api.setTransports("ws,wss");
         String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion());
-
+        
 
         api.setAsyncApiDefinition(asyncApiDefinition);
         api.setSwaggerDefinition(asyncApiDefinition);
@@ -498,5 +500,29 @@ public class AzureAPIUtil {
         endpointConfig.add("sandbox_endpoints", sand);
 
         return endpointConfig.toString();
+    }
+
+    /**
+     * Check if the API definition has resources.
+     *
+     * @param apiDefinition The API definition string (OpenAPI/Swagger JSON).
+     * @return true if the API has resources, false otherwise.
+     */
+    public static boolean hasResources(String apiDefinition) {
+        if (StringUtils.isEmpty(apiDefinition)) {
+            return false;
+        }
+
+        // 1. First safety check: Does it even contain the "paths" block?
+        if (!apiDefinition.contains("paths")) {
+            return false;
+        }
+
+        java.util.regex.Pattern resourcePattern = java.util.regex.Pattern.compile("[\"']?/[^\"'\\r\\n]+[\"']?\\s*:");
+        java.util.regex.Matcher matcher = resourcePattern.matcher(apiDefinition);
+
+        // If we find at least one match ("/users":), it has resources.
+        boolean hasResources = matcher.find();
+        return hasResources;
     }
 }
