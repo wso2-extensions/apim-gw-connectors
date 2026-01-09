@@ -436,4 +436,28 @@ public class AzureAPIUtil {
 
         return endpointConfig.toString();
     }
+
+    /**
+     * Check if the API definition has resources.
+     *
+     * @param apiDefinition The API definition string (OpenAPI/Swagger JSON).
+     * @return true if the API has resources, false otherwise.
+     */
+    public static boolean hasResources(String apiDefinition) {
+        if (StringUtils.isEmpty(apiDefinition)) {
+            return false;
+        }
+
+        // 1. First safety check: Does it even contain the "paths" block?
+        if (!apiDefinition.contains("paths")) {
+            return false;
+        }
+
+        java.util.regex.Pattern resourcePattern = java.util.regex.Pattern.compile("[\"']?/[^\"'\\r\\n]+[\"']?\\s*:");
+        java.util.regex.Matcher matcher = resourcePattern.matcher(apiDefinition);
+
+        // If we find at least one match ("/users":), it has resources.
+        boolean hasResources = matcher.find();
+        return hasResources;
+    }
 }
