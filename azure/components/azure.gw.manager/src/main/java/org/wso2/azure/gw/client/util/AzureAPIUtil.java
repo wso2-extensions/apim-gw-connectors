@@ -418,15 +418,17 @@ public class AzureAPIUtil {
     /**websocket API to wso2 API*/
     public static API websocketAPIToAPI(ApiContract apiContract, String organization,
                                         Environment environment) {
+        boolean isDefaultVersion = apiContract.apiVersion() == null;
         APIIdentifier apiIdentifier = new APIIdentifier(
             "admin",
             apiContract.displayName(),
-            apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0"
-    );                                        
+            isDefaultVersion ? "1.0.0" : apiContract.apiVersion()
+        );                                        
         API api = new API(apiIdentifier); 
 
         String context = "/";
-        context += apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
+        String path = apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
+        context += getContextWithoutVersion(path, apiIdentifier.getVersion());
         String contextTemplate = context;
 
         api.setDisplayName(apiContract.displayName());
@@ -437,6 +439,9 @@ public class AzureAPIUtil {
         api.setOrganization(organization);
         api.setRevision(false);
         api.setInitiatedFromGateway(true);
+        if (isDefaultVersion) {
+            api.setAsDefaultVersion(true);
+        }
         api.setGatewayVendor("external");
         api.setGatewayType(environment.getGatewayType());
         api.setType("WS");
