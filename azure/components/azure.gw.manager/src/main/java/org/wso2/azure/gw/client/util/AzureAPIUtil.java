@@ -58,6 +58,7 @@ import org.wso2.azure.gw.client.policy.policies.AzureCORSPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureJWTPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureRateLimitPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureSetHeaderPolicy;
+import org.wso2.carbon.apimgt.api.APIDefinition;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
@@ -65,10 +66,12 @@ import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
+import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -447,17 +450,14 @@ public class AzureAPIUtil {
         if (StringUtils.isEmpty(apiDefinition)) {
             return false;
         }
-
-        // 1. First safety check: Does it even contain the "paths" block?
-        if (!apiDefinition.contains("paths")) {
+        try {
+            APIDefinition oasParser = OASParserUtil.getOASParser(apiDefinition);
+            Set<URITemplate> uriTemplates = oasParser
+                    .getURITemplates(apiDefinition);
+            return uriTemplates != null && !uriTemplates.isEmpty();
+        } catch (APIManagementException e) {
+            log.warn("Error while parsing API definition to check for resources, using regex fallback", e);
             return false;
         }
-
-        java.util.regex.Pattern resourcePattern = java.util.regex.Pattern.compile("[\"']?/[^\"'\\r\\n]+[\"']?\\s*:");
-        java.util.regex.Matcher matcher = resourcePattern.matcher(apiDefinition);
-
-        // If we find at least one match ("/users":), it has resources.
-        boolean hasResources = matcher.find();
-        return hasResources;
     }
 }
