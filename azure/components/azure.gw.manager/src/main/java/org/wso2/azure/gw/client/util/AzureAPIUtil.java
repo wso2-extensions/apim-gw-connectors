@@ -39,6 +39,7 @@ import com.azure.resourcemanager.apimanagement.models.OperationContract;
 import com.azure.resourcemanager.apimanagement.models.PolicyContentFormat;
 import com.azure.resourcemanager.apimanagement.models.PolicyIdName;
 import com.azure.resourcemanager.apimanagement.models.Protocol;
+import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.azure.resourcemanager.apimanagement.models.VersioningScheme;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -225,6 +226,158 @@ public class AzureAPIUtil {
             return generateReferenceArtifact(api, apiContract, versionSetContract, revisionContract);
         } catch (Exception e) {
             throw new APIManagementException("Error while deploying API to Azure Gateway: " + api.getId(), e);
+        }
+    }
+
+    /**
+     * Deploys a websocket API to the Azure API Management Gateway.
+     *
+     * @param api          The API object containing the details to be deployed.
+     * @param manager      The Azure ApiManagementManager instance for managing APIs.
+     * @param resourceGroup The Azure resource group where the API will be deployed.
+     * @param serviceName  The name of the Azure API Management service.
+     * @return A JSON string containing the reference artifact with UUID and path, or null if deployment fails.
+     */
+    public static String deployWebSocketAPI(API api, ApiManagementManager manager, String resourceGroup,
+                                       String serviceName) throws APIManagementException {
+        try{
+            String endpointConfig = api.getEndpointConfig();
+            if (StringUtils.isEmpty(endpointConfig)) {
+                throw new APIManagementException("Endpoint configuration is empty for API: " + api.getId());
+            }
+            JsonObject endpointConfigJson = JsonParser.parseString(endpointConfig).getAsJsonObject();
+            JsonObject prodEndpoints = endpointConfigJson != null &&
+                      endpointConfigJson.has("production_endpoints") &&
+                      endpointConfigJson.get("production_endpoints").isJsonObject()
+                    ? endpointConfigJson.getAsJsonObject("production_endpoints")
+                    : null;
+            String productionEndpoint = (prodEndpoints != null
+                    && prodEndpoints.has("url")
+                    && !prodEndpoints.get("url").isJsonNull())
+                    ? prodEndpoints.get("url").getAsString()
+                    : null;
+            if (productionEndpoint == null) {
+                throw new APIManagementException("Production endpoint URL is null for API: " + api.getId());
+            }
+            productionEndpoint = productionEndpoint.endsWith("/") ?
+                    productionEndpoint.substring(0, productionEndpoint.length() - 1) : productionEndpoint;
+
+            List<String> wso2Transports = Arrays.asList(api.getTransports().split(","));
+            List<Protocol> azureTransports = new ArrayList<>();
+            if (wso2Transports.contains("ws")) {
+                azureTransports.add(Protocol.WS);
+            }
+            if (wso2Transports.contains("wss")) {
+                azureTransports.add(Protocol.WSS);
+            }
+            if (azureTransports.isEmpty()) {
+                azureTransports.add(Protocol.WS);
+                azureTransports.add(Protocol.WSS);
+            }
+
+            String versionSetId = api.getId().getApiName();
+            ApiVersionSetContract versionSetContract = manager.apiVersionSets().define(versionSetId)
+                    .withExistingService(resourceGroup, serviceName).withDisplayName(versionSetId)
+                    .withVersioningScheme(VersioningScheme.SEGMENT).create();
+
+            ApiContract apiContract = manager.apis()
+                    .define(api.getUuid()) // Use UUID as the API name since name needs to be unique
+                    .withExistingService(resourceGroup, serviceName)
+                    .withDisplayName(api.getId().getApiName())
+                    .withPath(getContextWithoutVersion(api.getContext(), api.getId().getVersion()))
+                    .withServiceUrl(productionEndpoint)
+                    .withApiType(ApiType.WEBSOCKET)
+                    .withApiVersionSetId(versionSetContract.id())
+                    .withApiVersion(api.getId().getVersion())
+                    .withSubscriptionRequired(false)
+                    .withProtocols(azureTransports)
+                    .create();
+
+            if (api.getDescription() != null && !api.getDescription().isEmpty()) {
+                apiContract.update().withDescription(api.getDescription()).withIfMatch("*").apply();
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("API deployed successfully to Azure Gateway: " + api.getUuid());
+            }
+
+            // AzurePolicyBuilderFactory policyBuilderFactory = new AzurePolicyBuilderFactory();
+            // AzurePolicyBuilder apiLevelPolicyBuilder =
+            //         policyBuilderFactory.newPolicyBuilder();
+            // apiLevelPolicyBuilder.addPolicy(new AzureCORSPolicy(api.getCorsConfiguration()),
+            //         AzureConstants.POLICY_DIRECTION_REQUEST);
+
+            // //configure API level policies
+            // List<OperationPolicy> apiPolicies = api.getApiPolicies();
+            // if (apiPolicies != null) {
+            //     for (OperationPolicy policy : apiPolicies) {
+            //         addPoliciesToPolicyBuilder(policy, apiLevelPolicyBuilder);
+            //     }
+            // }
+
+            // String apiLevelPolicyContent = apiLevelPolicyBuilder.build();
+            // if (apiLevelPolicyContent != null) {
+            //     ApiPoliciesCreateOrUpdateResponse response = manager.serviceClient().getApiPolicies().
+            //             createOrUpdateWithResponse(resourceGroup, serviceName, apiContract.name(), PolicyIdName.POLICY,
+            //                     new PolicyContractInner().withFormat(PolicyContentFormat.XML)
+            //                             .withValue(apiLevelPolicyContent), "*", Context.NONE);
+            //     if (response.getStatusCode() / 100 != 2) {
+            //         String errBody = response.getValue().value();
+            //         log.error("Failed to attach Azure policies: HTTP " + response.getStatusCode() + " body=" + errBody);
+            //         throw new APIManagementException("Failed to attach Azure policies: HTTP " + response.getStatusCode()
+            //                 + " body=" + errBody);
+            //     }
+            // }
+
+            // // Configure Operation level policies
+            // IterableStream<OperationContract> operationContracts =
+            //         manager.apiOperations().listByApi(resourceGroup, serviceName, apiContract.name());
+
+            // for (URITemplate resource : api.getUriTemplates()) {
+            //     for (OperationPolicy policy : resource.getOperationPolicies()) {
+            //         AzurePolicyBuilder operationLevelPolicyBuilder =
+            //                 policyBuilderFactory.newPolicyBuilder();
+            //         addPoliciesToPolicyBuilder(policy, operationLevelPolicyBuilder);
+            //         String operationLevelPolicyContent = operationLevelPolicyBuilder.build();
+
+            //         PolicyContractInner resourceLevelJWTPolicy = new PolicyContractInner()
+            //                 .withFormat(PolicyContentFormat.XML)
+            //                 .withValue(operationLevelPolicyContent);
+
+            //         String operationId = null;
+            //         for (OperationContract operationContract : operationContracts) {
+            //             if (operationContract.method().equals(resource.getHTTPVerb()) &&
+            //                     operationContract.urlTemplate().equals(resource.getUriTemplate())) {
+            //                 operationId = operationContract.name();
+            //                 break;
+            //             }
+            //         }
+            //         if (operationId == null) {
+            //             throw new APIManagementException("Azure API operation not found for resource: " +
+            //                     resource.getUriTemplate());
+            //         }
+
+            //         ApiOperationPoliciesCreateOrUpdateResponse response = manager.serviceClient()
+            //                 .getApiOperationPolicies().createOrUpdateWithResponse(resourceGroup, serviceName,
+            //                         apiContract.name(), operationId, PolicyIdName.POLICY, resourceLevelJWTPolicy,
+            //                         "*", Context.NONE);
+            //     }
+            // }
+
+            // if (log.isDebugEnabled()) {
+            //     log.debug("API deployed successfully to Azure Gateway: " + api.getUuid());
+            // }
+
+            PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions().listByService(resourceGroup,
+                serviceName, apiContract.name(), "isCurrent eq true", /* top */ null, /* skip */ null, Context.NONE);
+            ApiRevisionContract revisionContract = revisions.stream().findFirst().orElse(null);
+            if (revisionContract == null) {
+                throw new APIManagementException("Created API Revision not found for api: " + api.getDisplayName());
+            }
+
+            return generateReferenceArtifact(api, apiContract, versionSetContract, revisionContract);
+        }catch (Exception e){
+            throw new APIManagementException("Error while deploying WebSocket API to Azure Gateway: " + api.getId(), e);
         }
     }
 
