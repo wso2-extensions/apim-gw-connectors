@@ -7,18 +7,10 @@
   "channels": {
     "/*": {
       "subscribe": {
-        "message": {
-          "payload": {
-            "type": "object"
-          }
-        }
+        "summary": "Subscribe to wildcard topic"
       },
       "publish": {
-        "message": {
-          "payload": {
-            "type": "object"
-          }
-        }
+        "summary": "Publish to wildcard topic"
       }
     }
   }
