@@ -195,6 +195,8 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                                 if ("WS".equals(apiType)) {
                                     api.setAsyncApiDefinition(oas);
                                     api.setTransports("ws,wss");
+                                } else if ("HTTP".equals(apiType)) {
+                                    api.setTransports("http,https");
                                 }
                             }
                         }
