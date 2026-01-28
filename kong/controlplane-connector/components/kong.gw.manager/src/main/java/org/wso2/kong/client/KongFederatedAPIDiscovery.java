@@ -305,10 +305,12 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             environment.getVhosts().get(0).getHost() :
                             KongConstants.DEFAULT_VHOST;
                     if ("WS".equalsIgnoreCase(ApiType)) {
+                        api.setTransports("ws,wss");
                         api.setAsyncApiDefinition(
                                 KongAPIUtil.buildOasFromRoutesForAsync(svc, routes, vhost)
                         );
                     } else {
+                        api.setTransports("http,https");
                         api.setSwaggerDefinition(
                                 KongAPIUtil.buildOasFromRoutes(svc, routes, vhost));
                     }
