@@ -4,6 +4,12 @@
     "title": "${TITLE}",
     "version": "${VERSION}"
   },
+  "servers": {
+    "production": {
+      "url": "${SERVER_URL}",
+      "protocol": "${PROTOCOL}"
+    }
+  },
   "channels": {
     "/*": {
       "subscribe": {
