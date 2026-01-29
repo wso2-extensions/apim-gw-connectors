@@ -510,8 +510,7 @@ public class AzureAPIUtil {
             apiContract.displayName(),
             isDefaultVersion ? "1.0.0" : apiContract.apiVersion()
         );                                        
-        API api = new API(apiIdentifier); 
-
+        API api = new API(apiIdentifier);
         String context = "/";
         String path = apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
         context += getContextWithoutVersion(path, apiIdentifier.getVersion());
@@ -525,16 +524,20 @@ public class AzureAPIUtil {
         api.setOrganization(organization);
         api.setRevision(false);
         api.setInitiatedFromGateway(true);
-        if (isDefaultVersion) {
-            api.setAsDefaultVersion(true);
-        }
         api.setGatewayVendor("external");
         api.setGatewayType(environment.getGatewayType());
         api.setType("WS");
         api.setTransports("ws,wss");
-        String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion());
-
-
+        
+        String protocol = apiContract.protocols().contains(Protocol.WSS) ? "wss" : "ws";
+        
+        // Build production URL for AsyncAPI definition
+        String productionUrl = buildWebSocketProductionUrl(environment, apiContract, protocol);
+        if (log.isDebugEnabled()) {
+            log.debug("Built WebSocket production URL: " + productionUrl);
+        }
+        String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion(), productionUrl, protocol);
+        
         api.setAsyncApiDefinition(asyncApiDefinition);
         api.setSwaggerDefinition(asyncApiDefinition);
         if (apiContract.serviceUrl() != null) {
@@ -549,9 +552,7 @@ public class AzureAPIUtil {
      * Build endpointConfig JSON using Gson.
      * Both production and sandbox endpoints are included.
      */
-
-    private static String loadAsyncApiTemplate(String title, String version) {
-
+    private static String loadAsyncApiTemplate(String title, String version, String serverUrl, String protocol) {
         try (java.io.InputStream inputStream = AzureAPIUtil.class.getClassLoader()
                 .getResourceAsStream("asyncapi-template.json")) {
             if (inputStream == null) {
@@ -561,12 +562,92 @@ public class AzureAPIUtil {
             try (java.util.Scanner scanner = new java.util.Scanner(inputStream, "UTF-8")) {
                 String content = scanner.useDelimiter("\\A").next();
                 return content.replace("${TITLE}", title)
-                        .replace("${VERSION}", version);
+                        .replace("${VERSION}", version)
+                        .replace("${SERVER_URL}", serverUrl)
+                        .replace("${PROTOCOL}", protocol);
             }
         } catch (java.io.IOException e) {
             log.error("Error loading AsyncAPI template", e);
             return null;
         }
+    }
+
+    /**
+     * Build WebSocket production URL for AsyncAPI definition.
+     * Format: ws(s)://hostname/path[/version]
+     * Note: Version is excluded if it's the default version (1.0.0)
+     * 
+     * @param environment The WSO2 environment containing gateway endpoint
+     * @param apiContract The Azure API contract
+     * @param protocol The WebSocket protocol ("ws" or "wss")
+     * @return The formatted WebSocket URL
+     */
+    private static String buildWebSocketProductionUrl(Environment environment, ApiContract apiContract, String protocol) {
+        String gatewayEndpoint = environment.getApiGatewayEndpoint();
+        if (log.isDebugEnabled()) {
+            log.debug("Original gateway endpoint: " + gatewayEndpoint);
+        }
+        
+        if (gatewayEndpoint == null || gatewayEndpoint.isEmpty()) {
+            return "";
+        }
+        
+        // Handle multiple endpoints (take first if comma-separated)
+        if (gatewayEndpoint.contains(",")) {
+            gatewayEndpoint = gatewayEndpoint.split(",")[0].trim();
+            if (log.isDebugEnabled()) {
+                log.debug("After comma split: " + gatewayEndpoint);
+            }
+        }
+        
+        String hostname = gatewayEndpoint;
+        
+        hostname = hostname.replaceFirst("^https?://", "");
+        if (log.isDebugEnabled()) {
+            log.debug("After removing protocol: " + hostname);
+        }
+        
+        int portIndex = hostname.indexOf(':');
+        if (portIndex > 0) {
+            hostname = hostname.substring(0, portIndex);
+            if (log.isDebugEnabled()) {
+                log.debug("After removing port: " + hostname);
+            }
+        }
+        
+        int pathIndex = hostname.indexOf('/');
+        if (pathIndex > 0) {
+            hostname = hostname.substring(0, pathIndex);
+            if (log.isDebugEnabled()) {
+                log.debug("After removing path: " + hostname);
+            }
+        }
+        
+        StringBuilder url = new StringBuilder();
+        url.append("ws".equalsIgnoreCase(protocol) ? "ws://" : "wss://");
+        url.append(hostname);
+        
+        String path = apiContract.path();
+        if (path != null && !path.isEmpty()) {
+            if (!path.startsWith("/")) {
+                url.append("/");
+            }
+            url.append(path);
+        }
+        
+        String version = apiContract.apiVersion();
+        if (version != null && !version.isEmpty() && !"1.0.0".equals(version)) {
+            if (url.charAt(url.length() - 1) != '/') {
+                url.append("/");
+            }
+            url.append(version);
+        }
+        
+        String finalUrl = url.toString();
+        if (log.isDebugEnabled()) {
+            log.debug("Final WebSocket URL: " + finalUrl);
+        }
+        return finalUrl;
     }
 
     public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver, boolean isWebSocket) {
