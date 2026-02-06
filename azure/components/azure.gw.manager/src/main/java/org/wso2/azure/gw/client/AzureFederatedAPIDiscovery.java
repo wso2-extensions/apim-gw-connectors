@@ -31,12 +31,13 @@ import com.azure.identity.ClientSecretCredentialBuilder;
 import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
 import com.azure.resourcemanager.apimanagement.models.ApiRevisionContract;
-import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.azure.gw.client.builder.AzureBuilderFactory;
 import org.wso2.azure.gw.client.util.AzureAPIUtil;
+import org.wso2.carbon.apimgt.api.model.FederatedAPIBuilder;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedAPIDiscovery;
 import org.wso2.carbon.apimgt.api.model.API;
@@ -60,7 +61,8 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
     private String serviceName;
     private String hostName;
     private ApiManagementManager manager;
-    HttpClient httpClient;
+    private AzureBuilderFactory builderFactory;
+    private HttpClient httpClient;
 
     @Override
     public void init(Environment environment, String organization)
@@ -96,6 +98,9 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
             this.environment = environment;
             this.organization = organization;
+            
+            // Initialize the builder factory with all required dependencies
+            this.builderFactory = new AzureBuilderFactory(manager, httpClient, resourceGroup, serviceName);
 
             if (tenantId == null || clientId == null || clientSecret == null || subscriptionId == null
             || resourceGroup == null || serviceName == null || hostName == null) {
@@ -121,36 +126,36 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
                         Context.NONE
                 );
         List<DiscoveredAPI> retrievedAPIs = new ArrayList<>();
-        for (ApiContract api : apis) {
+        for (ApiContract rawApi : apis) {
             try {
-                API apiArtifact = null;
-                // Get API
-                if (ApiType.WEBSOCKET.equals(api.apiType())){
-                    apiArtifact = AzureAPIUtil.websocketAPIToAPI(api, organization, environment);
-                }
-                else{
-                    String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
-                    apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
-                }
+                // 1. Get the appropriate builder for this API type
+                FederatedAPIBuilder<ApiContract> builder = builderFactory.getBuilder(rawApi);
 
-                if (apiArtifact == null) {
-                    log.warn("Skipping unsupported API type: " + api.apiType() + " for API: " + api.name());
-                    continue;
-                }
-                // Get current revision
-                PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions().listByService(resourceGroup,
-                        serviceName, api.name(), "isCurrent eq true", /* top */ null, /* skip */ null, Context.NONE);
-                ApiRevisionContract revisionContract = revisions.stream().findFirst().orElse(null);
-                if (revisionContract == null) {
-                    throw new APIManagementException("Current API Revision not found for api: " + api.name());
-                }
-                String referenceArtifact = AzureAPIUtil.generateReferenceArtifact(apiArtifact, api, null,
-                        revisionContract);
+                if (builder != null) {
+                    // 2. Build the WSO2 API object using the builder
+                    API apiArtifact = builder.build(rawApi, environment, organization);
+                    
+                    // 3. Get current revision for reference artifact
+                    PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions().listByService(
+                        resourceGroup, serviceName, rawApi.name(), 
+                        "isCurrent eq true", null, null, Context.NONE);
+                    ApiRevisionContract revisionContract = revisions.stream().findFirst().orElse(null);
+                    if (revisionContract == null) {
+                        throw new APIManagementException("Current API Revision not found for api: " + rawApi.name());
+                    }
+                    
+                    // 4. Generate reference artifact
+                    String referenceArtifact = AzureAPIUtil.generateReferenceArtifact(
+                        apiArtifact, rawApi, null, revisionContract);
 
-                retrievedAPIs.add(new DiscoveredAPI(apiArtifact, referenceArtifact));
+                    retrievedAPIs.add(new DiscoveredAPI(apiArtifact, referenceArtifact));
+                } else {
+                    log.warn("No builder found for API type: " + rawApi.apiType() + 
+                            " for API: " + rawApi.name());
+                }
 
             } catch (APIManagementException e) {
-                log.error("Error retrieving API definition for API: " + api.name(), e);
+                log.error("Error retrieving API definition for API: " + rawApi.name(), e);
             }
         }
         return retrievedAPIs;
