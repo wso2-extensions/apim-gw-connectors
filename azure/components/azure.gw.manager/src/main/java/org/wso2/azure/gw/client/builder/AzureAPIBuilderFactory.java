@@ -25,14 +25,10 @@ public class AzureAPIBuilderFactory extends FederatedBuilderFactory<ApiContract>
      */
     public AzureAPIBuilderFactory(ApiManagementManager manager, HttpClient httpClient, 
                                String resourceGroup, String serviceName) {
-        super(); // Initialize the builders list
+        super();
         
-        // Register Azure-specific builders
         registerBuilder(new AzureRestAPIBuilder(manager, httpClient, resourceGroup, serviceName));
         registerBuilder(new AzureWebSocketAPIBuilder(manager, httpClient, resourceGroup, serviceName));
         
-        // Future: Add more Azure API type builders
-        // registerBuilder(new AzureGraphQLAPIBuilder(manager, httpClient, resourceGroup, serviceName));
-        // registerBuilder(new AzureGrpcAPIBuilder(manager, httpClient, resourceGroup, serviceName));
     }
 }

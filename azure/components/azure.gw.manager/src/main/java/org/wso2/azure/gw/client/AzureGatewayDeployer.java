@@ -116,7 +116,7 @@ public class AzureGatewayDeployer implements GatewayDeployer {
      */
     @Override
     public String deploy(API api, String externalReference) throws APIManagementException {
-        if ("WS".equalsIgnoreCase(api.getType())) {
+        if (AzureConstants.AZURE_API_TYPE_WEBSOCKET.equalsIgnoreCase(api.getType())) {
             return AzureAPIUtil.deployWebSocketAPI(api, manager, resourceGroup, serviceName);
         }
         return AzureAPIUtil.deployRestAPI(api, manager, resourceGroup, serviceName);

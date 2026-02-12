@@ -100,7 +100,7 @@ public class GatewayUtil {
 
             // Validate scheme (only http and https are allowed)
             String protocol = uri.getScheme();
-            if (!"http".equalsIgnoreCase(protocol) && !"https".equalsIgnoreCase(protocol) && !"ws".equalsIgnoreCase(protocol) && !"wss".equalsIgnoreCase(protocol)) {
+            if (!AzureConstants.AZURE_PROTOCOL_HTTP.equalsIgnoreCase(protocol) && !AzureConstants.AZURE_PROTOCOL_HTTPS.equalsIgnoreCase(protocol) && !AzureConstants.AZURE_PROTOCOL_WS.equalsIgnoreCase(protocol) && !AzureConstants.AZURE_PROTOCOL_WSS.equalsIgnoreCase(protocol)) {
                 return "Invalid Endpoint URL";
             }
 

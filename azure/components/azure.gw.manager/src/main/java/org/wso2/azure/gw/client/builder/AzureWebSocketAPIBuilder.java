@@ -15,8 +15,6 @@ import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.Tier;
 
-import com.google.gson.JsonObject;
-
 /**
  * Builder for WebSocket APIs from Azure API Management.
  * Extends AzureAPIBuilder which provides common Azure logic.
@@ -44,7 +42,6 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
         if (path == null || path.isEmpty()) {
             path = AzureConstants.AZURE_NO_CONTEXT;
         }
-        // WebSocket doesn't include version
         return "/" + path;
     }
     
@@ -55,30 +52,24 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
     protected String getContextTemplate(ApiContract sourceApi) {
         String context = "/";
         context += sourceApi.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : sourceApi.path();
-        // No version placeholder for WebSocket
         return context;
     }
 
     @Override
     protected void mapSpecificDetails(API api, ApiContract data, Environment environment) throws APIManagementException {
-        // Set API type to WebSocket
-        api.setType("WS");
+        api.setType(AzureConstants.AZURE_API_TYPE_WEBSOCKET);
+        api.setTransports(AzureConstants.AZURE_WEBSOCKET_TRANSPORTS);
         
-        // Set WebSocket transports
-        api.setTransports("ws,wss");
+        String protocol = data.protocols().contains(Protocol.WSS)
+                ? AzureConstants.AZURE_PROTOCOL_WSS : AzureConstants.AZURE_PROTOCOL_WS;
         
-        // Generate synthetic AsyncAPI definition for WebSocket
-        String protocol = data.protocols().contains(Protocol.WSS) ? "wss" : "ws";
-        
-        // Build production URL for AsyncAPI definition
         String productionUrl = AzureAPIUtil.buildWebSocketProductionUrl(environment, data, protocol);
         String asyncApiDefinition = AzureAPIUtil.loadAsyncApiTemplate(data.displayName(), getVersion(data), productionUrl, protocol);
         api.setAsyncApiDefinition(asyncApiDefinition);
         
-        // Set WebSocket endpoint URL if available
         if (data.serviceUrl() != null) {
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    data.serviceUrl(), data.serviceUrl(), false, "ws"));
+                    data.serviceUrl(), data.serviceUrl(), false, AzureConstants.AZURE_PROTOCOL_WS));
         }
         api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
     }

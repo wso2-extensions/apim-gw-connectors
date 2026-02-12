@@ -61,16 +61,12 @@ import org.wso2.azure.gw.client.policy.policies.AzureRateLimitPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureSetHeaderPolicy;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
-import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
-import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * This class contains utility methods to interact with Azure API Gateway.
@@ -115,10 +111,10 @@ public class AzureAPIUtil {
 
             List<String> wso2Transports = Arrays.asList(api.getTransports().split(","));
             List<Protocol> azureTransports = new ArrayList<>();
-            if (wso2Transports.contains("http")) {
+            if (wso2Transports.contains(AzureConstants.AZURE_PROTOCOL_HTTP)) {
                 azureTransports.add(Protocol.HTTP);
             }
-            if (wso2Transports.contains("https")) {
+            if (wso2Transports.contains(AzureConstants.AZURE_PROTOCOL_HTTPS)) {
                 azureTransports.add(Protocol.HTTPS);
             }
 
@@ -264,10 +260,10 @@ public class AzureAPIUtil {
 
             List<String> wso2Transports = Arrays.asList(api.getTransports().split(","));
             List<Protocol> azureTransports = new ArrayList<>();
-            if (wso2Transports.contains("ws")) {
+            if (wso2Transports.contains(AzureConstants.AZURE_PROTOCOL_WS)) {
                 azureTransports.add(Protocol.WS);
             }
-            if (wso2Transports.contains("wss")) {
+            if (wso2Transports.contains(AzureConstants.AZURE_PROTOCOL_WSS)) {
                 azureTransports.add(Protocol.WSS);
             }
             if (azureTransports.isEmpty()) {
@@ -469,85 +465,6 @@ public class AzureAPIUtil {
         return content;
     }
 
-    // public static API restAPItoAPI(ApiContract apiContract, String apiDefinition, String organization,
-    //                                Environment environment) {
-    //     APIIdentifier apiIdentifier = new APIIdentifier("admin", apiContract.displayName(),
-    //             apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0");
-
-    //     API api = new API(apiIdentifier);
-
-    //     String context = "/";
-    //     context += apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
-    //     String contextTemplate = context + "/{version}";
-    //     context += "/" + apiIdentifier.getVersion();
-
-    //     api.setDisplayName(apiContract.displayName());
-    //     api.setUuid(UUID.randomUUID().toString());
-    //     api.setDescription(apiContract.description());
-    //     api.setContext(context);
-    //     api.setContextTemplate(contextTemplate);
-    //     api.setOrganization(organization);
-    //     api.setSwaggerDefinition(apiDefinition);
-    //     api.setRevision(false);
-    //     api.setInitiatedFromGateway(true);
-    //     api.setGatewayVendor("external");
-    //     api.setGatewayType(environment.getGatewayType());
-    //     if (apiContract.serviceUrl() != null) {
-    //         api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-    //                 apiContract.serviceUrl(), apiContract.serviceUrl(), false, false));
-    //     }
-    //     api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
-    //     return api;
-    // }
-
- 
-    /**websocket API to wso2 API*/
-    // public static API websocketAPIToAPI(ApiContract apiContract, String organization,
-    //                                     Environment environment) {
-    //     boolean isDefaultVersion = apiContract.apiVersion() == null;
-    //     APIIdentifier apiIdentifier = new APIIdentifier(
-    //         "admin",
-    //         apiContract.displayName(),
-    //         isDefaultVersion ? "1.0.0" : apiContract.apiVersion()
-    //     );                                        
-    //     API api = new API(apiIdentifier);
-    //     String context = "/";
-    //     String path = apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
-    //     context += getContextWithoutVersion(path, apiIdentifier.getVersion());
-    //     String contextTemplate = context;
-
-    //     api.setDisplayName(apiContract.displayName());
-    //     api.setUuid(UUID.randomUUID().toString());
-    //     api.setDescription(apiContract.description());
-    //     api.setContext(context);
-    //     api.setContextTemplate(contextTemplate);
-    //     api.setOrganization(organization);
-    //     api.setRevision(false);
-    //     api.setInitiatedFromGateway(true);
-    //     api.setGatewayVendor("external");
-    //     api.setGatewayType(environment.getGatewayType());
-    //     api.setType("WS");
-    //     api.setTransports("ws,wss");
-        
-    //     String protocol = apiContract.protocols().contains(Protocol.WSS) ? "wss" : "ws";
-        
-    //     // Build production URL for AsyncAPI definition
-    //     String productionUrl = buildWebSocketProductionUrl(environment, apiContract, protocol);
-    //     if (log.isDebugEnabled()) {
-    //         log.debug("Built WebSocket production URL: " + productionUrl);
-    //     }
-    //     String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion(), productionUrl, protocol);
-        
-    //     api.setAsyncApiDefinition(asyncApiDefinition);
-    //     api.setSwaggerDefinition(asyncApiDefinition);
-    //     if (apiContract.serviceUrl() != null) {
-    //         api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-    //                 apiContract.serviceUrl(), apiContract.serviceUrl(), false, true));
-    //     }
-    //     api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
-    //     return api; 
-    // }
-
     /**
      * Build endpointConfig JSON using Gson.
      * Both production and sandbox endpoints are included.
@@ -624,7 +541,7 @@ public class AzureAPIUtil {
         }
         
         StringBuilder url = new StringBuilder();
-        url.append("ws".equalsIgnoreCase(protocol) ? "ws://" : "wss://");
+        url.append(AzureConstants.AZURE_PROTOCOL_WS.equalsIgnoreCase(protocol) ? "ws://" : "wss://");
         url.append(hostname);
         
         String path = apiContract.path();
