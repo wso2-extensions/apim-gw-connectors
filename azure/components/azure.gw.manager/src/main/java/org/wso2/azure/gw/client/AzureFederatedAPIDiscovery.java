@@ -180,5 +180,5 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
         long newRevisionCreatedTime = newArtifact
                 .get(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH).getAsLong();
         return existingRevisionCreatedTime != newRevisionCreatedTime;
-    }
+    } 
 }

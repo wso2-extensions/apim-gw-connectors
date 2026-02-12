@@ -54,9 +54,6 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
         this.serviceName = serviceName;
     }
     
-    // ========== Common Azure Implementations ==========
-    // These are the same for all Azure API types
-    
     @Override
     protected String getName(ApiContract sourceApi) {
         return sourceApi.displayName() != null ? sourceApi.displayName() : sourceApi.name();
@@ -64,12 +61,12 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
     
     @Override
     protected String getVersion(ApiContract sourceApi) {
-        return sourceApi.apiVersion() != null ? sourceApi.apiVersion() : "1.0.0";
+        return sourceApi.apiVersion() != null ? sourceApi.apiVersion() : AzureConstants.AZURE_DEFAULT_VERSION;
     }
     
     @Override
     protected String getGatewayId(ApiContract sourceApi) {
-        return sourceApi.name(); // Azure API name is the unique identifier
+        return sourceApi.name();
     }
     
     @Override
@@ -102,9 +99,4 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
         return context + "/{version}";
     }
     
-    // ========== Abstract Methods ==========
-    // Subclasses must implement these for API-type-specific logic
-    
-    // canHandle() - already abstract in FederatedAPIBuilder
-    // mapSpecificDetails() - already abstract in FederatedAPIBuilder
 }

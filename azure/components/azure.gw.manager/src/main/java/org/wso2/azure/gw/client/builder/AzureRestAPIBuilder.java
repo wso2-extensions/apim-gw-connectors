@@ -23,7 +23,7 @@ import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
 import com.azure.resourcemanager.apimanagement.models.ApiType;
 
-
+import org.wso2.azure.gw.client.AzureConstants;
 import org.wso2.azure.gw.client.util.AzureAPIUtil;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
@@ -43,28 +43,22 @@ public class AzureRestAPIBuilder extends AzureAPIBuilder {
 
     @Override
     public boolean canHandle(ApiContract sourceApi) {
-        // Handles all non-WebSocket APIs (HTTP, REST, SOAP, GraphQL, gRPC)
         return sourceApi.apiType() == null || ApiType.HTTP.equals(sourceApi.apiType());
     }
 
     @Override
     protected void mapSpecificDetails(API api, ApiContract sourceApi, Environment environment) throws APIManagementException {
-        // Set API type
-        api.setType("HTTP");
+        api.setType(AzureConstants.AZURE_API_TYPE_HTTP);
+        api.setTransports(AzureConstants.AZURE_HTTP_TRANSPORTS);
         
-        // Set transports
-        api.setTransports("http,https");
-        
-        // Get and set OpenAPI/Swagger definition
         String definition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, sourceApi);
         if (definition != null && !definition.isEmpty()) {
             api.setSwaggerDefinition(definition);
         }
         
-        // Set endpoint URL if available
         if (sourceApi.serviceUrl() != null) {
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    sourceApi.serviceUrl(), sourceApi.serviceUrl(), false, "http"));
+                    sourceApi.serviceUrl(), sourceApi.serviceUrl(), false, AzureConstants.AZURE_PROTOCOL_HTTP));
         }
 
     }
