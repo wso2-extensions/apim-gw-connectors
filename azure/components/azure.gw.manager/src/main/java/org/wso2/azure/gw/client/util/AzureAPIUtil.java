@@ -39,6 +39,7 @@ import com.azure.resourcemanager.apimanagement.models.OperationContract;
 import com.azure.resourcemanager.apimanagement.models.PolicyContentFormat;
 import com.azure.resourcemanager.apimanagement.models.PolicyIdName;
 import com.azure.resourcemanager.apimanagement.models.Protocol;
+import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.azure.resourcemanager.apimanagement.models.VersioningScheme;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -228,6 +229,91 @@ public class AzureAPIUtil {
         }
     }
 
+    /**
+     * Deploys a websocket API to the Azure API Management Gateway.
+     *
+     * @param api          The API object containing the details to be deployed.
+     * @param manager      The Azure ApiManagementManager instance for managing APIs.
+     * @param resourceGroup The Azure resource group where the API will be deployed.
+     * @param serviceName  The name of the Azure API Management service.
+     * @return A JSON string containing the reference artifact with UUID and path, or null if deployment fails.
+     */
+    public static String deployWebSocketAPI(API api, ApiManagementManager manager, String resourceGroup,
+                                       String serviceName) throws APIManagementException {
+        try{
+            String endpointConfig = api.getEndpointConfig();
+            if (StringUtils.isEmpty(endpointConfig)) {
+                throw new APIManagementException("Endpoint configuration is empty for API: " + api.getId());
+            }
+            JsonObject endpointConfigJson = JsonParser.parseString(endpointConfig).getAsJsonObject();
+            JsonObject prodEndpoints = endpointConfigJson != null &&
+                      endpointConfigJson.has("production_endpoints") &&
+                      endpointConfigJson.get("production_endpoints").isJsonObject()
+                    ? endpointConfigJson.getAsJsonObject("production_endpoints")
+                    : null;
+            String productionEndpoint = (prodEndpoints != null
+                    && prodEndpoints.has("url")
+                    && !prodEndpoints.get("url").isJsonNull())
+                    ? prodEndpoints.get("url").getAsString()
+                    : null;
+            if (productionEndpoint == null) {
+                throw new APIManagementException("Production endpoint URL is null for API: " + api.getId());
+            }
+            productionEndpoint = productionEndpoint.endsWith("/") ?
+                    productionEndpoint.substring(0, productionEndpoint.length() - 1) : productionEndpoint;
+
+            List<String> wso2Transports = Arrays.asList(api.getTransports().split(","));
+            List<Protocol> azureTransports = new ArrayList<>();
+            if (wso2Transports.contains("ws")) {
+                azureTransports.add(Protocol.WS);
+            }
+            if (wso2Transports.contains("wss")) {
+                azureTransports.add(Protocol.WSS);
+            }
+            if (azureTransports.isEmpty()) {
+                azureTransports.add(Protocol.WS);
+                azureTransports.add(Protocol.WSS);
+            }
+
+            String versionSetId = api.getId().getApiName();
+            ApiVersionSetContract versionSetContract = manager.apiVersionSets().define(versionSetId)
+                    .withExistingService(resourceGroup, serviceName).withDisplayName(versionSetId)
+                    .withVersioningScheme(VersioningScheme.SEGMENT).create();
+
+            ApiContract apiContract = manager.apis()
+                    .define(api.getUuid()) // Use UUID as the API name since name needs to be unique
+                    .withExistingService(resourceGroup, serviceName)
+                    .withDisplayName(api.getId().getApiName())
+                    .withPath(getContextWithoutVersion(api.getContext(), api.getId().getVersion()))
+                    .withServiceUrl(productionEndpoint)
+                    .withApiType(ApiType.WEBSOCKET)
+                    .withApiVersionSetId(versionSetContract.id())
+                    .withApiVersion(api.getId().getVersion())
+                    .withSubscriptionRequired(false)
+                    .withProtocols(azureTransports)
+                    .create();
+
+            if (api.getDescription() != null && !api.getDescription().isEmpty()) {
+                apiContract.update().withDescription(api.getDescription()).withIfMatch("*").apply();
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("API deployed successfully to Azure Gateway: " + api.getUuid());
+            }
+
+            PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions().listByService(resourceGroup,
+                serviceName, apiContract.name(), "isCurrent eq true", /* top */ null, /* skip */ null, Context.NONE);
+            ApiRevisionContract revisionContract = revisions.stream().findFirst().orElse(null);
+            if (revisionContract == null) {
+                throw new APIManagementException("Created API Revision not found for api: " + api.getDisplayName());
+            }
+
+            return generateReferenceArtifact(api, apiContract, versionSetContract, revisionContract);
+        }catch (Exception e){
+            throw new APIManagementException("Error while deploying WebSocket API to Azure Gateway: " + api.getId(), e);
+        }
+    }
+
     public static String generateReferenceArtifact(API api, ApiContract apiContract,
                                                    ApiVersionSetContract versionSetContract,
                                                    ApiRevisionContract apiRevisionContract) {
@@ -383,44 +469,190 @@ public class AzureAPIUtil {
         return content;
     }
 
-    public static API restAPItoAPI(ApiContract apiContract, String apiDefinition, String organization,
-                                   Environment environment) {
-        APIIdentifier apiIdentifier = new APIIdentifier("admin", apiContract.displayName(),
-                apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0");
+    // public static API restAPItoAPI(ApiContract apiContract, String apiDefinition, String organization,
+    //                                Environment environment) {
+    //     APIIdentifier apiIdentifier = new APIIdentifier("admin", apiContract.displayName(),
+    //             apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0");
 
-        API api = new API(apiIdentifier);
+    //     API api = new API(apiIdentifier);
 
-        String context = "/";
-        context += apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
-        String contextTemplate = context + "/{version}";
-        context += "/" + apiIdentifier.getVersion();
+    //     String context = "/";
+    //     context += apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
+    //     String contextTemplate = context + "/{version}";
+    //     context += "/" + apiIdentifier.getVersion();
 
-        api.setDisplayName(apiContract.displayName());
-        api.setUuid(UUID.randomUUID().toString());
-        api.setDescription(apiContract.description());
-        api.setContext(context);
-        api.setContextTemplate(contextTemplate);
-        api.setOrganization(organization);
-        api.setSwaggerDefinition(apiDefinition);
-        api.setRevision(false);
-        api.setInitiatedFromGateway(true);
-        api.setGatewayVendor("external");
-        api.setGatewayType(environment.getGatewayType());
-        if (apiContract.serviceUrl() != null) {
-            api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    apiContract.serviceUrl(), apiContract.serviceUrl(), false));
-        }
-        api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
-        return api;
-    }
+    //     api.setDisplayName(apiContract.displayName());
+    //     api.setUuid(UUID.randomUUID().toString());
+    //     api.setDescription(apiContract.description());
+    //     api.setContext(context);
+    //     api.setContextTemplate(contextTemplate);
+    //     api.setOrganization(organization);
+    //     api.setSwaggerDefinition(apiDefinition);
+    //     api.setRevision(false);
+    //     api.setInitiatedFromGateway(true);
+    //     api.setGatewayVendor("external");
+    //     api.setGatewayType(environment.getGatewayType());
+    //     if (apiContract.serviceUrl() != null) {
+    //         api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
+    //                 apiContract.serviceUrl(), apiContract.serviceUrl(), false, false));
+    //     }
+    //     api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
+    //     return api;
+    // }
+
+ 
+    /**websocket API to wso2 API*/
+    // public static API websocketAPIToAPI(ApiContract apiContract, String organization,
+    //                                     Environment environment) {
+    //     boolean isDefaultVersion = apiContract.apiVersion() == null;
+    //     APIIdentifier apiIdentifier = new APIIdentifier(
+    //         "admin",
+    //         apiContract.displayName(),
+    //         isDefaultVersion ? "1.0.0" : apiContract.apiVersion()
+    //     );                                        
+    //     API api = new API(apiIdentifier);
+    //     String context = "/";
+    //     String path = apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
+    //     context += getContextWithoutVersion(path, apiIdentifier.getVersion());
+    //     String contextTemplate = context;
+
+    //     api.setDisplayName(apiContract.displayName());
+    //     api.setUuid(UUID.randomUUID().toString());
+    //     api.setDescription(apiContract.description());
+    //     api.setContext(context);
+    //     api.setContextTemplate(contextTemplate);
+    //     api.setOrganization(organization);
+    //     api.setRevision(false);
+    //     api.setInitiatedFromGateway(true);
+    //     api.setGatewayVendor("external");
+    //     api.setGatewayType(environment.getGatewayType());
+    //     api.setType("WS");
+    //     api.setTransports("ws,wss");
+        
+    //     String protocol = apiContract.protocols().contains(Protocol.WSS) ? "wss" : "ws";
+        
+    //     // Build production URL for AsyncAPI definition
+    //     String productionUrl = buildWebSocketProductionUrl(environment, apiContract, protocol);
+    //     if (log.isDebugEnabled()) {
+    //         log.debug("Built WebSocket production URL: " + productionUrl);
+    //     }
+    //     String asyncApiDefinition = loadAsyncApiTemplate(apiContract.displayName(), apiIdentifier.getVersion(), productionUrl, protocol);
+        
+    //     api.setAsyncApiDefinition(asyncApiDefinition);
+    //     api.setSwaggerDefinition(asyncApiDefinition);
+    //     if (apiContract.serviceUrl() != null) {
+    //         api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
+    //                 apiContract.serviceUrl(), apiContract.serviceUrl(), false, true));
+    //     }
+    //     api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
+    //     return api; 
+    // }
 
     /**
      * Build endpointConfig JSON using Gson.
      * Both production and sandbox endpoints are included.
      */
-    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver) {
+    public static String loadAsyncApiTemplate(String title, String version, String serverUrl, String protocol) {
+        try (java.io.InputStream inputStream = AzureAPIUtil.class.getClassLoader()
+                .getResourceAsStream("asyncapi-template.json")) {
+            if (inputStream == null) {
+                log.error("AsyncAPI template file not found in resources");
+                return null;
+            }
+            try (java.util.Scanner scanner = new java.util.Scanner(inputStream, "UTF-8")) {
+                String content = scanner.useDelimiter("\\A").next();
+                return content.replace("${TITLE}", title)
+                        .replace("${VERSION}", version)
+                        .replace("${SERVER_URL}", serverUrl)
+                        .replace("${PROTOCOL}", protocol);
+            }
+        } catch (java.io.IOException e) {
+            log.error("Error loading AsyncAPI template", e);
+            return null;
+        }
+    }
+
+    /**
+     * Build WebSocket production URL for AsyncAPI definition.
+     * Format: ws(s)://hostname/path[/version]
+     * Note: Version is excluded if it's the default version (1.0.0)
+     * 
+     * @param environment The WSO2 environment containing gateway endpoint
+     * @param apiContract The Azure API contract
+     * @param protocol The WebSocket protocol ("ws" or "wss")
+     * @return The formatted WebSocket URL
+     */
+    public static String buildWebSocketProductionUrl(Environment environment, ApiContract apiContract, String protocol) {
+        String gatewayEndpoint = environment.getApiGatewayEndpoint();
+        if (log.isDebugEnabled()) {
+            log.debug("Original gateway endpoint: " + gatewayEndpoint);
+        }
+        
+        if (gatewayEndpoint == null || gatewayEndpoint.isEmpty()) {
+            return "";
+        }
+        
+        // Handle multiple endpoints (take first if comma-separated)
+        if (gatewayEndpoint.contains(",")) {
+            gatewayEndpoint = gatewayEndpoint.split(",")[0].trim();
+            if (log.isDebugEnabled()) {
+                log.debug("After comma split: " + gatewayEndpoint);
+            }
+        }
+        
+        String hostname = gatewayEndpoint;
+        
+        hostname = hostname.replaceFirst("^https?://", "");
+        if (log.isDebugEnabled()) {
+            log.debug("After removing protocol: " + hostname);
+        }
+        
+        int portIndex = hostname.indexOf(':');
+        if (portIndex > 0) {
+            hostname = hostname.substring(0, portIndex);
+            if (log.isDebugEnabled()) {
+                log.debug("After removing port: " + hostname);
+            }
+        }
+        
+        int pathIndex = hostname.indexOf('/');
+        if (pathIndex > 0) {
+            hostname = hostname.substring(0, pathIndex);
+            if (log.isDebugEnabled()) {
+                log.debug("After removing path: " + hostname);
+            }
+        }
+        
+        StringBuilder url = new StringBuilder();
+        url.append("ws".equalsIgnoreCase(protocol) ? "ws://" : "wss://");
+        url.append(hostname);
+        
+        String path = apiContract.path();
+        if (path != null && !path.isEmpty()) {
+            if (!path.startsWith("/")) {
+                url.append("/");
+            }
+            url.append(path);
+        }
+        
+        String version = apiContract.apiVersion();
+        if (version != null && !version.isEmpty() && !"1.0.0".equals(version)) {
+            if (url.charAt(url.length() - 1) != '/') {
+                url.append("/");
+            }
+            url.append(version);
+        }
+        
+        String finalUrl = url.toString();
+        if (log.isDebugEnabled()) {
+            log.debug("Final WebSocket URL: " + finalUrl);
+        }
+        return finalUrl;
+    }
+
+    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver, String endpointType) {
         JsonObject endpointConfig = new JsonObject();
-        endpointConfig.addProperty("endpoint_type", "http");
+        endpointConfig.addProperty("endpoint_type", endpointType);
         endpointConfig.addProperty("failOver", failOver);
 
         JsonObject prod = new JsonObject();
