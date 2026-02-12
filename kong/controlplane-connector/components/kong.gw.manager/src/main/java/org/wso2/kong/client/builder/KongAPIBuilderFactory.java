@@ -38,15 +38,12 @@ public class KongAPIBuilderFactory extends FederatedBuilderFactory<KongApiBundle
      * @param organization WSO2 organization name
      */
     public KongAPIBuilderFactory(KongKonnectApi apiGatewayClient, String controlPlaneId, String organization) {
-        super(); // Initialize the builders list
+        super();
         
         // Register Kong-specific builders
         registerBuilder(new KongRestAPIBuilder(apiGatewayClient, controlPlaneId, organization));
         registerBuilder(new KongWebSocketAPIBuilder(apiGatewayClient, controlPlaneId, organization));
-        
-        // Future: Add more Kong API type builders
-        // registerBuilder(new KongGrpcAPIBuilder(apiGatewayClient, controlPlaneId, organization));
-        // registerBuilder(new KongGraphQLAPIBuilder(apiGatewayClient, controlPlaneId, organization));
+
     }
 
 }

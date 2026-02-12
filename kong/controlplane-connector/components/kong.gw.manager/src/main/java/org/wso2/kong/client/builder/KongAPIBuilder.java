@@ -46,11 +46,8 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
         this.organization = organization;
     }
     
-    // ========== Common Kong Implementations ==========
-    
     @Override
     protected String getName(KongApiBundle sourceApi) {
-        // Prefer API metadata name, fallback to service name
         if (sourceApi.hasApiMetadata()) {
             return sourceApi.getApi().getName();
         }
@@ -59,7 +56,6 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
     
     @Override
     protected String getVersion(KongApiBundle sourceApi) {
-        // Prefer API metadata version, fallback to default
         if (sourceApi.hasApiMetadata() && sourceApi.getApi().getVersion() != null) {
             return sourceApi.getApi().getVersion();
         }
@@ -68,7 +64,6 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
     
     @Override
     protected String getContext(KongApiBundle sourceApi) {
-        // Prefer API slug, fallback to service name
         if (sourceApi.hasApiMetadata() && sourceApi.getApi().getSlug() != null) {
             return KongAPIUtil.ensureLeadingSlash(sourceApi.getApi().getSlug());
         }
@@ -78,14 +73,12 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
     @Override
     protected String getContextTemplate(KongApiBundle sourceApi) {
         String context = getContext(sourceApi);
-        // Remove leading slash for template
         String template = context.startsWith("/") ? context.substring(1) : context;
         return template.toLowerCase().replace(" ", "-");
     }
     
     @Override
     protected String getGatewayId(KongApiBundle sourceApi) {
-        // Prefer API ID, fallback to service ID
         if (sourceApi.hasApiMetadata()) {
             return sourceApi.getApi().getId();
         }
@@ -94,14 +87,10 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
     
     @Override
     protected String getDescription(KongApiBundle sourceApi) {
-        // Prefer API description, fallback to empty
         if (sourceApi.hasApiMetadata() && sourceApi.getApi().getDescription() != null) {
             return sourceApi.getApi().getDescription();
         }
         return "";
     }
-    
-    // ========== Abstract Methods ==========
-    // canHandle() - already abstract in FederatedAPIBuilder
-    // mapSpecificDetails() - already abstract in FederatedAPIBuilder
+
 }

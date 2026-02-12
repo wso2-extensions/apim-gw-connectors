@@ -45,27 +45,21 @@ public class KongRestAPIBuilder extends KongAPIBuilder {
 
     @Override
     public boolean canHandle(KongApiBundle data) {
-        // Check protocol from service - if WebSocket, return false
         KongService svc = data.getService();
         if (svc != null && svc.getProtocol() != null) {
             String protocol = svc.getProtocol().toLowerCase();
-            if (protocol.equals("ws") || protocol.equals("wss")) {
-                return false; // WebSocket handled by WebSocketAPIBuilder
+            if (protocol.equals(KongConstants.PROTOCOL_WS) || protocol.equals(KongConstants.PROTOCOL_WSS)) {
+                return false;
             }
         }
-        // Handles HTTP/HTTPS/gRPC (everything except WebSocket)
         return true;
     }
 
     @Override
     protected void mapSpecificDetails(API api, KongApiBundle data, Environment environment) throws APIManagementException {
-        // Set API type
-        api.setType("HTTP");
+        api.setType(KongConstants.API_TYPE_HTTP);
+        api.setTransports(KongConstants.TRANSPORT_HTTP);
         
-        // Set transports
-        api.setTransports("http,https");
-        
-        // Fetch and set OAS definition if API metadata exists
         if (data.hasApiMetadata() && data.getApi().getApiSpecIds() != null && 
             !data.getApi().getApiSpecIds().isEmpty()) {
             String specId = data.getApi().getApiSpecIds().get(0);
@@ -75,19 +69,16 @@ public class KongRestAPIBuilder extends KongAPIBuilder {
                     api.setSwaggerDefinition(spec.getContent());
                 }
             } catch (Exception e) {
-                // If spec fetch fails, generate from routes
                 String generatedOas = KongAPIUtil.buildOasFromRoutes(
                     data.getService(), data.getRoutes(), data.getVhost());
                 api.setSwaggerDefinition(generatedOas);
             }
         } else {
-            // No API spec - generate OAS from routes
             String generatedOas = KongAPIUtil.buildOasFromRoutes(
                 data.getService(), data.getRoutes(), data.getVhost());
             api.setSwaggerDefinition(generatedOas);
         }
         
-        // Set endpoint configuration from service
         KongService svc = data.getService();
         if (svc != null) {
             String endpoint = KongAPIUtil.buildEndpointUrl(
@@ -95,23 +86,19 @@ public class KongRestAPIBuilder extends KongAPIBuilder {
             api.setEndpointConfig(KongAPIUtil.buildEndpointConfigJson(endpoint, endpoint, false));
         }
         
-        // Set default tier
         api.setAvailableTiers(new HashSet<>(Collections.singleton(new Tier(KongConstants.DEFAULT_TIER))));
         
-        // Process plugins for CORS and rate limiting
         if (data.getPlugins() != null) {
             String selectedRateLimitPolicy = null;
             
             for (KongPlugin plugin : data.getPlugins()) {
                 String pluginType = plugin.getName();
                 
-                // Handle CORS plugin
                 if (KongConstants.KONG_CORS_PLUGIN_TYPE.equals(pluginType)) {
                     api.setCorsConfiguration(KongAPIUtil.kongCorsToWso2Cors(plugin));
                     continue;
                 }
                 
-                // Handle rate limiting (prefer advanced over standard)
                 if (KongConstants.KONG_RATELIMIT_ADVANCED_PLUGIN_TYPE.equals(pluginType) 
                     && selectedRateLimitPolicy == null) {
                     String policy = KongAPIUtil.kongRateLimitingToWso2Policy(plugin);

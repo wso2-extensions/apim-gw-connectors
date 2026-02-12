@@ -36,13 +36,12 @@ import org.wso2.kong.client.model.KongService;
  * - KongPlugins: Policies and configurations
  */
 public class KongApiBundle {
-    private KongAPI api;               // API metadata (may be null for "raw services")
-    private KongService service;       // Backend service (required)
-    private List<KongRoute> routes;    // Routes/paths (required)
-    private List<KongPlugin> plugins;  // Plugins/policies (optional)
-    private String vhost;              // Virtual host for URL construction
+    private KongAPI api;
+    private KongService service;
+    private List<KongRoute> routes;
+    private List<KongPlugin> plugins;
+    private String vhost;
 
-    // Constructors
     public KongApiBundle() {
     }
     
@@ -55,7 +54,6 @@ public class KongApiBundle {
         this.vhost = vhost;
     }
     
-    // Getters and Setters
     public KongAPI getApi() {
         return api;
     }
@@ -102,4 +100,5 @@ public class KongApiBundle {
     public boolean hasApiMetadata() {
         return api != null;
     }
+
 }

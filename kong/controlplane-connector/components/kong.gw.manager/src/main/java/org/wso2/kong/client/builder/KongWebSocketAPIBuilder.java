@@ -44,53 +44,43 @@ public class KongWebSocketAPIBuilder extends KongAPIBuilder {
 
     @Override
     public boolean canHandle(KongApiBundle data) {
-        // Check protocol from service
         KongService svc = data.getService();
         if (svc != null && svc.getProtocol() != null) {
             String protocol = svc.getProtocol().toLowerCase();
-            return protocol.equals("ws") || protocol.equals("wss");
+            return protocol.equals(KongConstants.PROTOCOL_WS) || protocol.equals(KongConstants.PROTOCOL_WSS);
         }
         return false;
     }
 
     @Override
     protected void mapSpecificDetails(API api, KongApiBundle data, Environment environment) throws APIManagementException {
-        // Set API type to WebSocket
-        api.setType("WS");
+        api.setType(KongConstants.API_TYPE_WS);
+        api.setTransports(KongConstants.TRANSPORT_WS);
         
-        // Set WebSocket transports
-        api.setTransports("ws,wss");
-        
-        // Generate synthetic AsyncAPI definition for WebSocket
         KongService svc = data.getService();
         String asyncApiDef = KongAPIUtil.buildDefinitionFromRoutesForAsync(
             data.getService(), data.getRoutes(), data.getVhost());
         api.setAsyncApiDefinition(asyncApiDef);
         
-        // Set WebSocket endpoint configuration
         if (svc != null) {
             String endpoint = KongAPIUtil.buildEndpointUrl(
                 svc.getProtocol(), svc.getHost(), svc.getPort(), svc.getPath());
             api.setEndpointConfig(KongAPIUtil.buildEndpointConfigJson(endpoint, endpoint, false));
         }
         
-        // Set default tier
         api.setAvailableTiers(new HashSet<>(Collections.singleton(new Tier(KongConstants.DEFAULT_TIER))));
         
-        // Process plugins for CORS and rate limiting
         if (data.getPlugins() != null) {
             String selectedRateLimitPolicy = null;
             
             for (KongPlugin plugin : data.getPlugins()) {
                 String pluginType = plugin.getName();
                 
-                // Handle CORS plugin
                 if (KongConstants.KONG_CORS_PLUGIN_TYPE.equals(pluginType)) {
                     api.setCorsConfiguration(KongAPIUtil.kongCorsToWso2Cors(plugin));
                     continue;
                 }
                 
-                // Handle rate limiting
                 if (KongConstants.KONG_RATELIMIT_ADVANCED_PLUGIN_TYPE.equals(pluginType) 
                     && selectedRateLimitPolicy == null) {
                     String policy = KongAPIUtil.kongRateLimitingToWso2Policy(plugin);

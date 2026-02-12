@@ -36,6 +36,18 @@ public class KongConstants {
     public static final String KONG_RATELIMIT_ADVANCED_PLUGIN_TYPE = "rate-limiting-advanced";
     public static final String KONG_RATELIMIT_PLUGIN_TYPE = "rate-limiting";
 
+    // API Types
+    public static final String API_TYPE_HTTP = "HTTP";
+    public static final String API_TYPE_WS = "WS";
+
+    // Protocols
+    public static final String PROTOCOL_WS = "ws";
+    public static final String PROTOCOL_WSS = "wss";
+
+    // Transports
+    public static final String TRANSPORT_HTTP = "http,https";
+    public static final String TRANSPORT_WS = "ws,wss";
+
     // Commonly used default values and headers
     public static final String AUTHORIZATION_HEADER = "Authorization";
     public static final String BEARER_PREFIX = "Bearer ";
