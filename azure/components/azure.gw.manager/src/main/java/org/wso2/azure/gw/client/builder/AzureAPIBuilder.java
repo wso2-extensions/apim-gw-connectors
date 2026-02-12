@@ -23,7 +23,7 @@ import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
 
 import org.wso2.azure.gw.client.AzureConstants;
-import org.wso2.carbon.apimgt.api.model.FederatedAPIBuilder;
+import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
 
 /**
  * Abstract base class for Azure API builders.
@@ -58,23 +58,23 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
     // These are the same for all Azure API types
     
     @Override
-    protected String getName(ApiContract rawData) {
-        return rawData.displayName() != null ? rawData.displayName() : rawData.name();
+    protected String getName(ApiContract sourceApi) {
+        return sourceApi.displayName() != null ? sourceApi.displayName() : sourceApi.name();
     }
     
     @Override
-    protected String getVersion(ApiContract rawData) {
-        return rawData.apiVersion() != null ? rawData.apiVersion() : "1.0.0";
+    protected String getVersion(ApiContract sourceApi) {
+        return sourceApi.apiVersion() != null ? sourceApi.apiVersion() : "1.0.0";
     }
     
     @Override
-    protected String getGatewayId(ApiContract rawData) {
-        return rawData.name(); // Azure API name is the unique identifier
+    protected String getGatewayId(ApiContract sourceApi) {
+        return sourceApi.name(); // Azure API name is the unique identifier
     }
     
     @Override
-    protected String getDescription(ApiContract rawData) {
-        return rawData.description() != null ? rawData.description() : "";
+    protected String getDescription(ApiContract sourceApi) {
+        return sourceApi.description() != null ? sourceApi.description() : "";
     }
     
     /**
@@ -82,12 +82,12 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
      * Subclasses can override if they need different logic (e.g., WebSocket).
      */
     @Override
-    protected String getContext(ApiContract rawData) {
-        String path = rawData.path();
+    protected String getContext(ApiContract sourceApi) {
+        String path = sourceApi.path();
         if (path == null || path.isEmpty()) {
             path = AzureConstants.AZURE_NO_CONTEXT;
         }
-        String version = getVersion(rawData);
+        String version = getVersion(sourceApi);
         return "/" + path + "/" + version;
     }
     
@@ -96,9 +96,9 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
      * Subclasses can override if needed.
      */
     @Override
-    protected String getContextTemplate(ApiContract rawData) {
+    protected String getContextTemplate(ApiContract sourceApi) {
         String context = "/";
-        context += rawData.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : rawData.path();
+        context += sourceApi.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : sourceApi.path();
         return context + "/{version}";
     }
     

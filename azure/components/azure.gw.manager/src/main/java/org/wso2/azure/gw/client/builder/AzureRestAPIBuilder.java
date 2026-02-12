@@ -26,13 +26,13 @@ public class AzureRestAPIBuilder extends AzureAPIBuilder {
     }
 
     @Override
-    public boolean canHandle(ApiContract data) {
+    public boolean canHandle(ApiContract sourceApi) {
         // Handles all non-WebSocket APIs (HTTP, REST, SOAP, GraphQL, gRPC)
-        return data.apiType() == null || ApiType.HTTP.equals(data.apiType());
+        return sourceApi.apiType() == null || ApiType.HTTP.equals(sourceApi.apiType());
     }
 
     @Override
-    protected void mapSpecificDetails(API api, ApiContract data, Environment environment) throws APIManagementException {
+    protected void mapSpecificDetails(API api, ApiContract sourceApi, Environment environment) throws APIManagementException {
         // Set API type
         api.setType("HTTP");
         
@@ -40,17 +40,16 @@ public class AzureRestAPIBuilder extends AzureAPIBuilder {
         api.setTransports("http,https");
         
         // Get and set OpenAPI/Swagger definition
-        String definition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, data);
+        String definition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, sourceApi);
         if (definition != null && !definition.isEmpty()) {
             api.setSwaggerDefinition(definition);
         }
         
         // Set endpoint URL if available
-        if (data.serviceUrl() != null) {
+        if (sourceApi.serviceUrl() != null) {
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    data.serviceUrl(), data.serviceUrl(), false, "http"));
+                    sourceApi.serviceUrl(), sourceApi.serviceUrl(), false, "http"));
         }
 
-        api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
     }
 }

@@ -39,8 +39,8 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
      * Overrides the default Azure implementation.
      */
     @Override
-    protected String getContext(ApiContract rawData) {
-        String path = rawData.path();
+    protected String getContext(ApiContract sourceApi) {
+        String path = sourceApi.path();
         if (path == null || path.isEmpty()) {
             path = AzureConstants.AZURE_NO_CONTEXT;
         }
@@ -52,9 +52,9 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
      * WebSocket APIs don't include version placeholder in template.
      */
     @Override
-    protected String getContextTemplate(ApiContract rawData) {
+    protected String getContextTemplate(ApiContract sourceApi) {
         String context = "/";
-        context += rawData.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : rawData.path();
+        context += sourceApi.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : sourceApi.path();
         // No version placeholder for WebSocket
         return context;
     }

@@ -35,9 +35,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.azure.gw.client.builder.AzureBuilderFactory;
+import org.wso2.azure.gw.client.builder.AzureAPIBuilderFactory;
 import org.wso2.azure.gw.client.util.AzureAPIUtil;
-import org.wso2.carbon.apimgt.api.model.FederatedAPIBuilder;
+import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedAPIDiscovery;
 import org.wso2.carbon.apimgt.api.model.API;
@@ -61,7 +61,7 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
     private String serviceName;
     private String hostName;
     private ApiManagementManager manager;
-    private AzureBuilderFactory builderFactory;
+    private AzureAPIBuilderFactory builderFactory;
     private HttpClient httpClient;
 
     @Override
@@ -100,7 +100,7 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
             this.organization = organization;
             
             // Initialize the builder factory with all required dependencies
-            this.builderFactory = new AzureBuilderFactory(manager, httpClient, resourceGroup, serviceName);
+            this.builderFactory = new AzureAPIBuilderFactory(manager, httpClient, resourceGroup, serviceName);
 
             if (tenantId == null || clientId == null || clientSecret == null || subscriptionId == null
             || resourceGroup == null || serviceName == null || hostName == null) {
