@@ -81,7 +81,7 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
         String protocol = data.protocols().contains(Protocol.WSS)
                 ? AzureConstants.AZURE_PROTOCOL_WSS : AzureConstants.AZURE_PROTOCOL_WS;
         
-        String productionUrl = AzureAPIUtil.buildWebSocketProductionUrl(environment, data, protocol);
+        String productionUrl = AzureAPIUtil.buildWebSocketUrl(environment, data, protocol);
         String asyncApiDefinition = AzureAPIUtil.loadAsyncApiTemplate(data.displayName(), getVersion(data), productionUrl, protocol);
         api.setAsyncApiDefinition(asyncApiDefinition);
         
