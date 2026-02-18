@@ -44,4 +44,25 @@ public class AWSConstants {
     public static final String SANDBOX_ENDPOINTS = "sandbox_endpoints";
     public static final String URL_PROP = "url";
     public static final String DEFAULT_VERSION = "1.0.0";
+
+    // API type constants
+    public static final String API_TYPE_HTTP = "HTTP";
+    public static final String API_TYPE_WS = "WS";
+
+    // Transport constants
+    public static final String HTTP_TRANSPORTS = "http,https";
+    public static final String WS_TRANSPORTS = "ws,wss";
+
+    // Endpoint type constants
+    public static final String ENDPOINT_TYPE_HTTP = "http";
+    public static final String ENDPOINT_TYPE_WS = "ws";
+
+    // Default tier for WebSocket APIs
+    public static final String DEFAULT_TIER = "Unlimited";
+
+    // AsyncAPI version
+    public static final String ASYNC_API_VERSION = "2.6.0";
+
+    // WebSocket protocol
+    public static final String PROTOCOL_WSS = "wss";
 }
