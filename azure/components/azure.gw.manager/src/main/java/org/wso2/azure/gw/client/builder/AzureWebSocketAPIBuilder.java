@@ -23,15 +23,14 @@ import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
 import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.azure.resourcemanager.apimanagement.models.Protocol;
-
-import java.util.HashSet;
-
 import org.wso2.azure.gw.client.AzureConstants;
 import org.wso2.azure.gw.client.util.AzureAPIUtil;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.Tier;
+
+import java.util.HashSet;
 
 /**
  * Builder for WebSocket APIs from Azure API Management.
@@ -74,7 +73,8 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
     }
 
     @Override
-    protected void mapSpecificDetails(API api, ApiContract data, Environment environment) throws APIManagementException {
+    protected void mapSpecificDetails(API api, ApiContract data,
+                                      Environment environment) throws APIManagementException {
         api.setType(AzureConstants.AZURE_API_TYPE_WEBSOCKET);
         api.setTransports(AzureConstants.AZURE_WEBSOCKET_TRANSPORTS);
         
@@ -82,7 +82,8 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
                 ? AzureConstants.AZURE_PROTOCOL_WSS : AzureConstants.AZURE_PROTOCOL_WS;
         
         String productionUrl = AzureAPIUtil.buildWebSocketUrl(environment, data, protocol);
-        String asyncApiDefinition = AzureAPIUtil.loadAsyncApiTemplate(data.displayName(), getVersion(data), productionUrl, protocol);
+        String asyncApiDefinition = AzureAPIUtil.buildAsyncApiDefinition(
+                data.displayName(), getVersion(data), productionUrl, protocol);
         api.setAsyncApiDefinition(asyncApiDefinition);
         
         if (data.serviceUrl() != null) {

@@ -47,7 +47,8 @@ public class AzureRestAPIBuilder extends AzureAPIBuilder {
     }
 
     @Override
-    protected void mapSpecificDetails(API api, ApiContract sourceApi, Environment environment) throws APIManagementException {
+    protected void mapSpecificDetails(API api, ApiContract sourceApi,
+                                      Environment environment) throws APIManagementException {
         api.setType(AzureConstants.AZURE_API_TYPE_HTTP);
         api.setTransports(AzureConstants.AZURE_HTTP_TRANSPORTS);
         

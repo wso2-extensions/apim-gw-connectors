@@ -39,7 +39,6 @@ import com.azure.resourcemanager.apimanagement.models.OperationContract;
 import com.azure.resourcemanager.apimanagement.models.PolicyContentFormat;
 import com.azure.resourcemanager.apimanagement.models.PolicyIdName;
 import com.azure.resourcemanager.apimanagement.models.Protocol;
-import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.azure.resourcemanager.apimanagement.models.VersioningScheme;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -381,27 +380,47 @@ public class AzureAPIUtil {
     }
 
     /**
-     * Build endpointConfig JSON using Gson.
-     * Both production and sandbox endpoints are included.
+     * Builds an AsyncAPI 2.0.0 definition programmatically for Azure WebSocket APIs.
+     * Produces the same structure as the previous template-based approach:
+     * a single wildcard channel (/*) with both subscribe and publish operations.
+     *
+     * @param title     The API display name.
+     * @param version   The API version.
+     * @param serverUrl The WebSocket server URL (e.g., wss://host/path).
+     * @param protocol  The WebSocket protocol ("ws" or "wss").
+     * @return The AsyncAPI definition as a JSON string.
      */
-    public static String loadAsyncApiTemplate(String title, String version, String serverUrl, String protocol) {
-        try (java.io.InputStream inputStream = AzureAPIUtil.class.getClassLoader()
-                .getResourceAsStream("asyncapi-template.json")) {
-            if (inputStream == null) {
-                log.error("AsyncAPI template file not found in resources");
-                return null;
-            }
-            try (java.util.Scanner scanner = new java.util.Scanner(inputStream, "UTF-8")) {
-                String content = scanner.useDelimiter("\\A").next();
-                return content.replace("${TITLE}", title)
-                        .replace("${VERSION}", version)
-                        .replace("${SERVER_URL}", serverUrl)
-                        .replace("${PROTOCOL}", protocol);
-            }
-        } catch (java.io.IOException e) {
-            log.error("Error loading AsyncAPI template", e);
-            return null;
-        }
+    public static String buildAsyncApiDefinition(String title, String version, String serverUrl, String protocol) {
+        JsonObject asyncApi = new JsonObject();
+        asyncApi.addProperty("asyncapi", AzureConstants.ASYNC_API_VERSION);
+
+        JsonObject info = new JsonObject();
+        info.addProperty("title", title);
+        info.addProperty("version", version);
+        asyncApi.add("info", info);
+
+        JsonObject servers = new JsonObject();
+        JsonObject production = new JsonObject();
+        production.addProperty("url", serverUrl);
+        production.addProperty("protocol", protocol);
+        servers.add("production", production);
+        asyncApi.add("servers", servers);
+
+        JsonObject channels = new JsonObject();
+        JsonObject wildcardChannel = new JsonObject();
+
+        JsonObject subscribe = new JsonObject();
+        subscribe.addProperty("summary", "Subscribe to wildcard topic");
+        wildcardChannel.add("subscribe", subscribe);
+
+        JsonObject publish = new JsonObject();
+        publish.addProperty("summary", "Publish to wildcard topic");
+        wildcardChannel.add("publish", publish);
+
+        channels.add("/*", wildcardChannel);
+        asyncApi.add("channels", channels);
+
+        return new Gson().toJson(asyncApi);
     }
 
     /**
@@ -482,7 +501,10 @@ public class AzureAPIUtil {
         return finalUrl;
     }
 
-    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver, String endpointType) {
+    public static String buildEndpointConfigJson(String productionUrl,
+                                                  String sandboxUrl,
+                                                  boolean failOver,
+                                                  String endpointType) {
         JsonObject endpointConfig = new JsonObject();
         endpointConfig.addProperty("endpoint_type", endpointType);
         endpointConfig.addProperty("failOver", failOver);

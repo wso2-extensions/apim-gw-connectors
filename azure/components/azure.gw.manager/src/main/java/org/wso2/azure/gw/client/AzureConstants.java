@@ -98,6 +98,9 @@ public class AzureConstants {
     public static final String AZURE_PROTOCOL_WS = "ws";
     public static final String AZURE_PROTOCOL_WSS = "wss";
 
+    // AsyncAPI version
+    public static final String ASYNC_API_VERSION = "2.0.0";
+
     // Environment related constants
     public static final String AZURE_ENVIRONMENT_TENANT_ID = "tenant_id";
     public static final String AZURE_ENVIRONMENT_SUBSCRIPTION_ID = "subscription_id";
