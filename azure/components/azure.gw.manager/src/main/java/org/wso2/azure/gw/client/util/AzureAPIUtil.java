@@ -381,7 +381,6 @@ public class AzureAPIUtil {
 
     /**
      * Builds an AsyncAPI 2.0.0 definition programmatically for Azure WebSocket APIs.
-     * Produces the same structure as the previous template-based approach:
      * a single wildcard channel (/*) with both subscribe and publish operations.
      *
      * @param title     The API display name.

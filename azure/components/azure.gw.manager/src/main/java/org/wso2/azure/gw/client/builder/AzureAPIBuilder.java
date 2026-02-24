@@ -28,12 +28,6 @@ import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
 /**
  * Abstract base class for Azure API builders.
  * Contains common Azure-specific logic that applies to all Azure API types.
- * 
- * Subclasses (REST, WebSocket, GraphQL, etc.) only need to implement:
- * - canHandle(): Which API type they support
- * - mapSpecificDetails(): Type-specific mapping logic
- * - getContext(): If they need custom context path logic
- * - getContextTemplate(): If they need custom context template logic
  */
 public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
     
@@ -74,10 +68,6 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
         return sourceApi.description() != null ? sourceApi.description() : "";
     }
     
-    /**
-     * Default context implementation includes version.
-     * Subclasses can override if they need different logic (e.g., WebSocket).
-     */
     @Override
     protected String getContext(ApiContract sourceApi) {
         String path = sourceApi.path();
@@ -88,10 +78,6 @@ public abstract class AzureAPIBuilder extends FederatedAPIBuilder<ApiContract> {
         return "/" + path + "/" + version;
     }
     
-    /**
-     * Default context template includes version placeholder.
-     * Subclasses can override if needed.
-     */
     @Override
     protected String getContextTemplate(ApiContract sourceApi) {
         String context = "/";

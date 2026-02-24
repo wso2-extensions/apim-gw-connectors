@@ -49,10 +49,6 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
         return ApiType.WEBSOCKET.equals(data.apiType());
     }
     
-    /**
-     * WebSocket APIs don't include version in the context path.
-     * Overrides the default Azure implementation.
-     */
     @Override
     protected String getContext(ApiContract sourceApi) {
         String path = sourceApi.path();
@@ -62,9 +58,6 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
         return "/" + path;
     }
     
-    /**
-     * WebSocket APIs don't include version placeholder in template.
-     */
     @Override
     protected String getContextTemplate(ApiContract sourceApi) {
         String context = "/";

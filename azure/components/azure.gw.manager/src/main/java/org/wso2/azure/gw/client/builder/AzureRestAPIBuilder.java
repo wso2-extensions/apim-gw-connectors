@@ -30,7 +30,7 @@ import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.Environment;
 
 /**
- * Builder for REST/HTTP/SOAP APIs from Azure API Management.
+ * Builder for REST/HTTP APIs from Azure API Management.
  * Extends AzureAPIBuilder which provides common Azure logic.
  * Only implements API-type-specific logic for REST APIs.
  */

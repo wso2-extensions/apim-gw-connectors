@@ -27,9 +27,6 @@ import org.wso2.carbon.apimgt.api.FederatedBuilderFactory;
 /**
  * Azure-specific implementation of FederatedBuilderFactory.
  * Creates and manages builders for different Azure API types (REST, WebSocket, etc.).
- * 
- * This factory extends the gateway-agnostic FederatedBuilderFactory and registers
- * Azure-specific builders for each API type.
  */
 public class AzureAPIBuilderFactory extends FederatedBuilderFactory<ApiContract> {
 
