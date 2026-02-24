@@ -22,28 +22,91 @@ package org.wso2.azure.gw.client.builder;
 import com.azure.core.http.HttpClient;
 import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
-import org.wso2.carbon.apimgt.api.FederatedBuilderFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Azure-specific implementation of FederatedBuilderFactory.
  * Creates and manages builders for different Azure API types (REST, WebSocket, etc.).
  */
-public class AzureAPIBuilderFactory extends FederatedBuilderFactory<ApiContract> {
+public class AzureAPIBuilderFactory {
+
+    private final List<AzureAPIBuilder> builders;
 
     /**
      * Constructor initializes the factory with Azure-specific builders.
-     * 
+     *
      * @param manager Azure API Management Manager
      * @param httpClient HTTP client for making Azure API calls
      * @param resourceGroup Azure resource group name
      * @param serviceName Azure API Management service name
      */
-    public AzureAPIBuilderFactory(ApiManagementManager manager, HttpClient httpClient, 
+    public AzureAPIBuilderFactory(ApiManagementManager manager, HttpClient httpClient,
                                String resourceGroup, String serviceName) {
-        super();
-        
+        this.builders = new ArrayList<>();
+        initBuilders(manager, httpClient, resourceGroup, serviceName);
+    }
+
+    private void initBuilders(ApiManagementManager manager, HttpClient httpClient,
+                           String resourceGroup, String serviceName) {
         registerBuilder(new AzureRestAPIBuilder(manager, httpClient, resourceGroup, serviceName));
         registerBuilder(new AzureWebSocketAPIBuilder(manager, httpClient, resourceGroup, serviceName));
-        
+    }
+    
+    /**
+     * @param sourceApi The raw API data from the gateway
+     * @return The builder that can handle this API type, or exception if unsupported
+     */
+    public AzureAPIBuilder getBuilder(ApiContract sourceApi) {
+        for (AzureAPIBuilder builder : builders) {
+            if (builder.canHandle(sourceApi)) {
+                return builder;
+            }
+        }
+        throw new IllegalStateException(
+        "No registered builder can handle the given API data");
+    }
+    
+    /**
+     * Registers a builder in the factory.
+     * Subclasses can use this to add builders in their constructor.
+     * 
+     * @param builder The builder to register
+     */
+    protected void registerBuilder(AzureAPIBuilder builder) {
+        if (builder != null) {
+            // 1. Check if ANY builder in the list has the same CLASS as the new one
+            boolean alreadyExists = false;
+            for (AzureAPIBuilder existing : builders) {
+                if (existing.getClass().equals(builder.getClass())) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+
+            if (!alreadyExists) {
+                builders.add(builder);
+            }
+        }
+    }
+    
+    /**
+     * Gets all registered builders.
+     * Useful for testing and debugging.
+     * 
+     * @return List of all registered builders
+     */
+    public List<AzureAPIBuilder> getRegisteredBuilders() {
+        return new ArrayList<>(builders); // Return a copy for safety
+    }
+    
+    /**
+     * Gets the count of registered builders.
+     * 
+     * @return Number of registered builders
+     */
+    public int getBuilderCount() {
+        return builders.size();
     }
 }

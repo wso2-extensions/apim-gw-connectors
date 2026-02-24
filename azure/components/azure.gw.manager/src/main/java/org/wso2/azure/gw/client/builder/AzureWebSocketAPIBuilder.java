@@ -60,8 +60,9 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
     
     @Override
     protected String getContextTemplate(ApiContract sourceApi) {
+        String path = sourceApi.path();
         String context = "/";
-        context += sourceApi.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : sourceApi.path();
+        context += (path == null || path.isEmpty()) ? AzureConstants.AZURE_NO_CONTEXT : path;
         return context;
     }
 
@@ -71,7 +72,8 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
         api.setType(AzureConstants.AZURE_API_TYPE_WEBSOCKET);
         api.setTransports(AzureConstants.AZURE_WEBSOCKET_TRANSPORTS);
         
-        String protocol = data.protocols().contains(Protocol.WSS)
+        java.util.List<Protocol> protocols = data.protocols();
+        String protocol = (protocols != null && protocols.contains(Protocol.WSS))
                 ? AzureConstants.AZURE_PROTOCOL_WSS : AzureConstants.AZURE_PROTOCOL_WS;
         
         String productionUrl = AzureAPIUtil.buildWebSocketUrl(environment, data, protocol);
@@ -81,7 +83,7 @@ public class AzureWebSocketAPIBuilder extends AzureAPIBuilder {
         
         if (data.serviceUrl() != null) {
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    data.serviceUrl(), data.serviceUrl(), false, AzureConstants.AZURE_PROTOCOL_WS));
+                    data.serviceUrl(), data.serviceUrl(), false, protocol));
         }
         api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
     }

@@ -58,8 +58,10 @@ public class AzureRestAPIBuilder extends AzureAPIBuilder {
         }
         
         if (sourceApi.serviceUrl() != null) {
+            String protocol = sourceApi.serviceUrl().startsWith(AzureConstants.AZURE_PROTOCOL_HTTPS)
+                    ? AzureConstants.AZURE_PROTOCOL_HTTPS : AzureConstants.AZURE_PROTOCOL_HTTP;
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    sourceApi.serviceUrl(), sourceApi.serviceUrl(), false, AzureConstants.AZURE_PROTOCOL_HTTP));
+                    sourceApi.serviceUrl(), sourceApi.serviceUrl(), false, protocol));
         }
 
     }
