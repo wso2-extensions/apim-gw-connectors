@@ -37,9 +37,8 @@ import org.wso2.carbon.apimgt.api.FederatedAPIDiscovery;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.DiscoveredAPI;
 import org.wso2.carbon.apimgt.api.model.Environment;
-import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
-
+import org.wso2.kong.client.builder.KongAPIBuilder;
 import org.wso2.kong.client.builder.KongAPIBuilderFactory;
 import org.wso2.kong.client.builder.KongApiBundle;
 import org.wso2.kong.client.model.KongAPI;
@@ -186,7 +185,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                         KongApiBundle kongApiBundle = new KongApiBundle(kongAPI, svc, routes, plugins, vhost);
                         
                         // Use factory to get appropriate builder
-                        FederatedAPIBuilder<KongApiBundle> builder = builderFactory.getBuilder(kongApiBundle);
+                        KongAPIBuilder builder = builderFactory.getBuilder(kongApiBundle);
                         if (builder == null) {
                             log.warn("No builder found for API: " + kongAPI.getName());
                             continue;
@@ -237,7 +236,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                         KongApiBundle kongApiBundle = new KongApiBundle(null, svc, routes, plugins, vhost);
                         
                         // Use factory to get appropriate builder
-                        FederatedAPIBuilder<KongApiBundle> builder = builderFactory.getBuilder(kongApiBundle);
+                        KongAPIBuilder builder = builderFactory.getBuilder(kongApiBundle);
                         if (builder == null) {
                             log.warn("No builder found for service: " + svc.getName());
                             continue;

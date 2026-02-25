@@ -18,7 +18,9 @@
 
 package org.wso2.kong.client.builder;
 
-import org.wso2.carbon.apimgt.api.FederatedBuilderFactory;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.wso2.kong.client.KongKonnectApi;
 
 /**
@@ -28,8 +30,10 @@ import org.wso2.kong.client.KongKonnectApi;
  * This factory extends the gateway-agnostic FederatedBuilderFactory and registers
  * Kong-specific builders for each API type.
  */
-public class KongAPIBuilderFactory extends FederatedBuilderFactory<KongApiBundle> {
-    
+public class KongAPIBuilderFactory {
+
+    private final List<KongAPIBuilder> builders;
+
     /**
      * Constructor initializes the factory with Kong-specific builders.
      * 
@@ -37,13 +41,70 @@ public class KongAPIBuilderFactory extends FederatedBuilderFactory<KongApiBundle
      * @param controlPlaneId Kong control plane ID
      * @param organization WSO2 organization name
      */
-    public KongAPIBuilderFactory(KongKonnectApi apiGatewayClient, String controlPlaneId, String organization) {
-        super();
-        
-        // Register Kong-specific builders
+    public KongAPIBuilderFactory(KongKonnectApi apiGatewayClient, String controlPlaneId, String organization){
+        this.builders = new ArrayList<>();
+        initBuilders(apiGatewayClient, controlPlaneId, organization);
+    }
+
+    private void initBuilders(KongKonnectApi apiGatewayClient, String controlPlaneId, String organization) {
         registerBuilder(new KongRestAPIBuilder(apiGatewayClient, controlPlaneId, organization));
         registerBuilder(new KongWebSocketAPIBuilder(apiGatewayClient, controlPlaneId, organization));
+    }
+    
+    /**
+     * @param sourceApi The raw API data from the gateway
+     * @return The builder that can handle this API type, or exception if unsupported
+     */
+    public KongAPIBuilder getBuilder(KongApiBundle sourceApi) {
+        for (KongAPIBuilder builder : builders) {
+            if (builder.canHandle(sourceApi)) {
+                return builder;
+            }
+        }
+        throw new IllegalStateException(
+        "No registered builder can handle the given API data");
+    }
+    
+    /**
+     * Registers a builder in the factory.
+     * Subclasses can use this to add builders in their constructor.
+     * 
+     * @param builder The builder to register
+     */
+    protected void registerBuilder(KongAPIBuilder builder) {
+        if (builder != null) {
+            // 1. Check if ANY builder in the list has the same CLASS as the new one
+            boolean alreadyExists = false;
+            for (KongAPIBuilder existing : builders) {
+                if (existing.getClass().equals(builder.getClass())) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
 
+            if (!alreadyExists) {
+                builders.add(builder);
+            }
+        }
+    }
+    
+    /**
+     * Gets all registered builders.
+     * Useful for testing and debugging.
+     * 
+     * @return List of all registered builders
+     */
+    public List<KongAPIBuilder> getRegisteredBuilders() {
+        return new ArrayList<>(builders); // Return a copy for safety
+    }
+    
+    /**
+     * Gets the count of registered builders.
+     * 
+     * @return Number of registered builders
+     */
+    public int getBuilderCount() {
+        return builders.size();
     }
 
 }

@@ -18,7 +18,12 @@
 
 package org.wso2.kong.client.builder;
 
-import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
+import java.util.UUID;
+
+import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.model.APIIdentifier;
+import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.kong.client.KongConstants;
 import org.wso2.kong.client.KongKonnectApi;
 import org.wso2.kong.client.util.KongAPIUtil;
@@ -31,7 +36,7 @@ import org.wso2.kong.client.util.KongAPIUtil;
  * - canHandle(): Which API type they support
  * - mapSpecificDetails(): Type-specific mapping logic
  */
-public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> {
+public abstract class KongAPIBuilder {
     protected KongKonnectApi apiGatewayClient;
     protected String controlPlaneId;
     protected String organization;
@@ -45,8 +50,43 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
         this.controlPlaneId = controlPlaneId;
         this.organization = organization;
     }
+
+    /**
+     * Builds a WSO2 API object from the raw external data.
+     *
+     * @param sourceApi The raw data object from the external gateway.
+     * @param env     The environment where the API is discovered.
+     * @param org     The organization context.
+     * @return The constructed API object.
+     * @throws APIManagementException If an error occurs during building.
+     */
+    public API build(KongApiBundle sourceApi, Environment env, String org) throws APIManagementException {
+        // 1. Basic Identification
+        APIIdentifier apiId = new APIIdentifier(org, getName(sourceApi), getVersion(sourceApi));
+
+        API api = new API(apiId);
+
+        // 2. Map Common Properties
+        api.setContext(getContext(sourceApi));
+        api.setContextTemplate(getContextTemplate(sourceApi));
+        api.setUuid(UUID.randomUUID().toString());
+        api.setDescription(getDescription(sourceApi));
+
+        // 3. Set Standard WSO2 Flags
+        api.setOrganization(org);
+        if (env != null) {
+            api.setGatewayType(env.getGatewayType());
+        }
+        api.setInitiatedFromGateway(true);
+        api.setRevision(false);
+        api.setGatewayVendor("external");
+
+        // 4. Specific Mapping (Delegated to subclasses)
+        mapSpecificDetails(api, sourceApi, env);
+
+        return api;
+    }
     
-    @Override
     protected String getName(KongApiBundle sourceApi) {
         if (sourceApi.hasApiMetadata()) {
             return sourceApi.getApi().getName();
@@ -54,7 +94,6 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
         return sourceApi.getService().getName();
     }
     
-    @Override
     protected String getVersion(KongApiBundle sourceApi) {
         if (sourceApi.hasApiMetadata() && sourceApi.getApi().getVersion() != null) {
             return sourceApi.getApi().getVersion();
@@ -62,7 +101,6 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
         return KongConstants.DEFAULT_API_VERSION;
     }
     
-    @Override
     protected String getContext(KongApiBundle sourceApi) {
         if (sourceApi.hasApiMetadata() && sourceApi.getApi().getSlug() != null) {
             return KongAPIUtil.ensureLeadingSlash(sourceApi.getApi().getSlug());
@@ -70,27 +108,41 @@ public abstract class KongAPIBuilder extends FederatedAPIBuilder<KongApiBundle> 
         return KongAPIUtil.ensureLeadingSlash(sourceApi.getService().getName());
     }
     
-    @Override
     protected String getContextTemplate(KongApiBundle sourceApi) {
         String context = getContext(sourceApi);
         String template = context.startsWith("/") ? context.substring(1) : context;
         return template.toLowerCase().replace(" ", "-");
     }
     
-    @Override
     protected String getGatewayId(KongApiBundle sourceApi) {
         if (sourceApi.hasApiMetadata()) {
             return sourceApi.getApi().getId();
         }
         return sourceApi.getService().getId();
     }
-    
-    @Override
+
     protected String getDescription(KongApiBundle sourceApi) {
         if (sourceApi.hasApiMetadata() && sourceApi.getApi().getDescription() != null) {
             return sourceApi.getApi().getDescription();
         }
         return "";
     }
+
+    /**
+     * Maps type-specific details (protocol, endpoints, definitions, etc.) to the API object.
+     *
+     * @param api     The WSO2 API object to populate.
+     * @param sourceApi The raw data object.
+     * @throws APIManagementException If an error occurs during mapping.
+     */
+    protected abstract void mapSpecificDetails(API api, KongApiBundle sourceApi, Environment env) throws APIManagementException;
+
+    /**
+     * Checks if this builder can handle the given raw data object.
+     *
+     * @param sourceApi The raw data object.
+     * @return True if this builder can handle the object, false otherwise.
+     */
+    public abstract boolean canHandle(KongApiBundle sourceApi);
 
 }
