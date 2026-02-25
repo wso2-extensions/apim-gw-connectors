@@ -47,7 +47,7 @@ import java.util.List;
  * is generated from the API's routes. The build never returns {@code null} — WebSocket APIs
  * are always created even if route fetching fails.
  */
-public class AWSWebSocketAPIBuilder extends AWSAPIBuilder {
+public class AWSWebSocketAPIBuilder extends AWSAPIBuilder<Api> {
 
     private static final Log log = LogFactory.getLog(AWSWebSocketAPIBuilder.class);
 
@@ -67,49 +67,42 @@ public class AWSWebSocketAPIBuilder extends AWSAPIBuilder {
     }
 
     @Override
-    protected String getName(Object sourceApi) {
-        Api a = (Api) sourceApi;
+    protected String getName(Api sourceApi) {
+        Api a = sourceApi;
         return a.name() != null ? a.name() : a.apiId();
     }
 
     @Override
-    protected String getVersion(Object sourceApi) {
+    protected String getVersion(Api sourceApi) {
         return stage != null ? stage : AWSConstants.DEFAULT_VERSION;
     }
 
     @Override
-    protected String getContext(Object sourceApi) {
+    protected String getContext(Api sourceApi) {
         return "/" + getName(sourceApi).toLowerCase().replace(" ", "-");
     }
 
     @Override
-    protected String getContextTemplate(Object sourceApi) {
+    protected String getContextTemplate(Api sourceApi) {
         // WebSocket APIs don't include version in context
         return getContext(sourceApi);
     }
 
     @Override
-    protected String getGatewayId(Object sourceApi) {
-        return ((Api) sourceApi).apiId();
+    protected String getDescription(Api sourceApi) {
+        return sourceApi.description() != null ? sourceApi.description() : "";
     }
 
     @Override
-    protected String getDescription(Object sourceApi) {
-        Api a = (Api) sourceApi;
-        return a.description() != null ? a.description() : "";
-    }
-
-    @Override
-    protected void mapSpecificDetails(API api, Object sourceApi, Environment env) throws APIManagementException {
-        Api v2Api = (Api) sourceApi;
+    protected void mapSpecificDetails(API api, Api sourceApi, Environment env) throws APIManagementException {
         api.setType(AWSConstants.API_TYPE_WS);
         api.setTransports(AWSConstants.WS_TRANSPORTS);
 
         // Fetch routes and build AsyncAPI definition
         try {
-            List<Route> routes = AWSAPIUtil.getWebSocketRoutes(client, v2Api.apiId());
-            String wsEndpointUrl = AWSAPIUtil.getWebSocketEndpointUrl(v2Api.apiId(), region, stage);
-            String asyncApiDef = AWSAPIUtil.buildAsyncApiDefinition(v2Api.name(),
+            List<Route> routes = AWSAPIUtil.getWebSocketRoutes(client, sourceApi.apiId());
+            String wsEndpointUrl = AWSAPIUtil.getWebSocketEndpointUrl(sourceApi.apiId(), region, stage);
+            String asyncApiDef = AWSAPIUtil.buildAsyncApiDefinition(sourceApi.name(),
                     getVersion(sourceApi), wsEndpointUrl, routes);
             api.setAsyncApiDefinition(asyncApiDef);
         } catch (Exception e) {
@@ -117,20 +110,19 @@ public class AWSWebSocketAPIBuilder extends AWSAPIBuilder {
             // API is still created without async definition
         }
 
-        api.setEndpointConfig(AWSAPIUtil.buildWebSocketEndpointConfig(v2Api.apiId(), region, stage));
+        api.setEndpointConfig(AWSAPIUtil.buildWebSocketEndpointConfig(sourceApi.apiId(), region, stage));
         api.setAvailableTiers(new HashSet<>(Collections.singleton(new Tier(AWSConstants.DEFAULT_TIER))));
     }
 
     @Override
-    public String createReferenceArtifact(Object rawApi) {
-        Api v2Api = (Api) rawApi;
+    public String createReferenceArtifact(Api rawApi) {
         List<Route> routes = Collections.emptyList();
         try {
-            routes = AWSAPIUtil.getWebSocketRoutes(client, v2Api.apiId());
+            routes = AWSAPIUtil.getWebSocketRoutes(client, rawApi.apiId());
         } catch (Exception e) {
             // fallback to empty routes
             log.debug("Failed to retrieve routes for WebSocket API '" + getName(rawApi) + "': " + e.getMessage());
         }
-        return AWSAPIUtil.createReferenceArtifact(v2Api, routes);
+        return AWSAPIUtil.createReferenceArtifact(rawApi, routes);
     }
 }

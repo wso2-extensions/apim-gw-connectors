@@ -60,7 +60,8 @@ public class AWSDiscoveryService {
 
         for (T raw : items) {
             try {
-                AWSAPIBuilder builder = factory.getBuilder(raw);
+                @SuppressWarnings("unchecked")
+                AWSAPIBuilder<T> builder = (AWSAPIBuilder<T>) factory.getBuilder(raw);
                 API api = builder.build(raw, env, org);
                 if (api != null) {
                     String reference = builder.createReferenceArtifact(raw);

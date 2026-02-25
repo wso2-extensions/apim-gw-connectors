@@ -18,7 +18,12 @@
 
 package org.wso2.aws.client.builder;
 
-import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
+import java.util.UUID;
+
+import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.model.APIIdentifier;
+import org.wso2.carbon.apimgt.api.model.Environment;
 
 /**
  * Abstract base for all AWS API Gateway builders.
@@ -36,7 +41,74 @@ import org.wso2.carbon.apimgt.api.FederatedAPIBuilder;
  *
  * @see AWSAPIBuilderFactory
  */
-public abstract class AWSAPIBuilder extends FederatedAPIBuilder<Object> {
+public abstract class AWSAPIBuilder<T> {
+
+    /**
+     * Builds a WSO2 API object from the raw external data.
+     *
+     * @param sourceApi The raw data object from the external gateway.
+     * @param env     The environment where the API is discovered.
+     * @param org     The organization context.
+     * @return The constructed API object.
+     * @throws APIManagementException If an error occurs during building.
+     */
+    public API build(T sourceApi, Environment env, String org) throws APIManagementException {
+        // 1. Basic Identification
+        APIIdentifier apiId = new APIIdentifier(org, getName(sourceApi), getVersion(sourceApi));
+
+        API api = new API(apiId);
+
+        // 2. Map Common Properties
+        api.setContext(getContext(sourceApi));
+        api.setContextTemplate(getContextTemplate(sourceApi));
+        api.setUuid(UUID.randomUUID().toString());
+        api.setDescription(getDescription(sourceApi));
+
+        // 3. Set Standard WSO2 Flags
+        api.setOrganization(org);
+        if (env != null) {
+            api.setGatewayType(env.getGatewayType());
+        }
+        api.setInitiatedFromGateway(true);
+        api.setRevision(false);
+        api.setGatewayVendor("external");
+
+        // 4. Specific Mapping (Delegated to subclasses)
+        mapSpecificDetails(api, sourceApi, env);
+
+        return api;
+    }
+    
+    protected abstract String getName(T sourceApi);
+    
+    protected abstract String getVersion(T sourceApi);
+    
+    protected abstract String getDescription(T sourceApi);
+    
+    protected abstract String getContext(T sourceApi);
+    
+    protected abstract String getContextTemplate(T sourceApi);
+
+    /**
+     * Maps type-specific details (protocol, endpoints, definitions, etc.) to the API object.
+     *
+     * @param api     The WSO2 API object to populate.
+     * @param sourceApi The raw data object.
+     * @throws APIManagementException If an error occurs during mapping.
+     */
+    protected abstract void mapSpecificDetails(API api, T sourceApi, Environment env) throws APIManagementException;
+
+    /**
+     * Checks if this builder can handle the given raw data object.
+     *
+     * <p>Accepts {@code Object} so the factory can call this through {@code AWSAPIBuilder<?>}
+     * without a wildcard-capture compile error. Implementations must check {@code instanceof}
+     * before casting.
+     *
+     * @param sourceApi The raw data object from the gateway.
+     * @return {@code true} if this builder can handle the object, {@code false} otherwise.
+     */
+    public abstract boolean canHandle(Object sourceApi);
 
     /**
      * Creates a reference artifact string for the given raw SDK API object.
@@ -45,6 +117,6 @@ public abstract class AWSAPIBuilder extends FederatedAPIBuilder<Object> {
      * @param rawApi The raw SDK object (RestApi for V1, Api for V2).
      * @return A string representing the reference artifact.
      */
-    public abstract String createReferenceArtifact(Object rawApi);
+    public abstract String createReferenceArtifact(T rawApi);
 }
 

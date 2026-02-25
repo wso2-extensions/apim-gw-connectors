@@ -40,7 +40,7 @@ import software.amazon.awssdk.services.apigateway.model.RestApi;
  * an {@link APIManagementException} is thrown from {@code mapSpecificDetails()}, which the
  * discovery service catches and logs at debug level.
  */
-public class AWSRestAPIBuilder extends AWSAPIBuilder {
+public class AWSRestAPIBuilder extends AWSAPIBuilder<RestApi> {
 
     private static final Log log = LogFactory.getLog(AWSRestAPIBuilder.class);
 
@@ -60,46 +60,39 @@ public class AWSRestAPIBuilder extends AWSAPIBuilder {
     }
 
     @Override
-    protected String getName(Object sourceApi) {
-        RestApi r = (RestApi) sourceApi;
+    protected String getName(RestApi sourceApi) {
+        RestApi r = sourceApi;
         return r.name() != null ? r.name() : r.id();
     }
 
     @Override
-    protected String getVersion(Object sourceApi) {
+    protected String getVersion(RestApi sourceApi) {
         return stage != null ? stage : AWSConstants.DEFAULT_VERSION;
     }
 
     @Override
-    protected String getContext(Object sourceApi) {
+    protected String getContext(RestApi sourceApi) {
         return "/" + getName(sourceApi).toLowerCase().replace(" ", "-");
     }
 
     @Override
-    protected String getContextTemplate(Object sourceApi) {
+    protected String getContextTemplate(RestApi sourceApi) {
         return getContext(sourceApi) + "/{version}";
     }
 
     @Override
-    protected String getGatewayId(Object sourceApi) {
-        return ((RestApi) sourceApi).id();
+    protected String getDescription(RestApi sourceApi) {
+        return sourceApi.description() != null ? sourceApi.description() : "";
     }
 
     @Override
-    protected String getDescription(Object sourceApi) {
-        RestApi r = (RestApi) sourceApi;
-        return r.description() != null ? r.description() : "";
-    }
-
-    @Override
-    protected void mapSpecificDetails(API api, Object sourceApi, Environment env) throws APIManagementException {
-        RestApi restApi = (RestApi) sourceApi;
+    protected void mapSpecificDetails(API api, RestApi sourceApi, Environment env) throws APIManagementException {
         api.setType(AWSConstants.API_TYPE_HTTP);
         api.setTransports(AWSConstants.HTTP_TRANSPORTS);
 
         String swagger;
         try {
-            swagger = AWSAPIUtil.getRestApiDefinition(client, restApi.id(), stage);
+            swagger = AWSAPIUtil.getRestApiDefinition(client, sourceApi.id(), stage);
         } catch (Exception e) {
             throw new APIManagementException("Cannot fetch Swagger for REST API '"
                     + getName(sourceApi) + "' (not deployed to stage '" + stage + "'?)", e);
@@ -109,19 +102,18 @@ public class AWSRestAPIBuilder extends AWSAPIBuilder {
                     + getName(sourceApi) + "' — skipping");
         }
         api.setSwaggerDefinition(swagger);
-        AWSAPIUtil.setEndpointConfig(api, restApi, region, stage);
+        AWSAPIUtil.setEndpointConfig(api, sourceApi, region, stage);
     }
 
     @Override
-    public String createReferenceArtifact(Object rawApi) {
-        RestApi restApi = (RestApi) rawApi;
+    public String createReferenceArtifact(RestApi rawApi) {
         String swagger = "{}";
         try {
-            swagger = AWSAPIUtil.getRestApiDefinition(client, restApi.id(), stage);
+            swagger = AWSAPIUtil.getRestApiDefinition(client, rawApi.id(), stage);
         } catch (Exception e) {
             // fallback to empty definition
             log.debug("Failed to retrieve Swagger definition for REST API '" + getName(rawApi) + "': " + e.getMessage());
         }
-        return AWSAPIUtil.createReferenceArtifact(restApi, swagger);
+        return AWSAPIUtil.createReferenceArtifact(rawApi, swagger);
     }
 }

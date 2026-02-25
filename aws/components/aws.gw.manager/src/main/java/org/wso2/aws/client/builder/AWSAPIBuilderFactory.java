@@ -18,12 +18,14 @@
 
 package org.wso2.aws.client.builder;
 
-import org.wso2.carbon.apimgt.api.FederatedBuilderFactory;
+import java.util.ArrayList;
+import java.util.List;
+
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient;
 import software.amazon.awssdk.services.apigatewayv2.ApiGatewayV2Client;
 
 /**
- * AWS-specific implementation of {@link FederatedBuilderFactory}.
+ * AWS-specific implementation
  *
  * <p>Registers builders for all supported AWS API Gateway types:
  * <ul>
@@ -35,22 +37,72 @@ import software.amazon.awssdk.services.apigatewayv2.ApiGatewayV2Client;
  * <p>The inherited {@code getBuilder(Object)} selects the appropriate builder
  * via the Strategy pattern ({@code canHandle()} on each registered builder).
  */
-public class AWSAPIBuilderFactory extends FederatedBuilderFactory<Object> {
+public class AWSAPIBuilderFactory {
+
+    private final List<AWSAPIBuilder<?>> builders;
 
     public AWSAPIBuilderFactory(ApiGatewayClient v1Client, ApiGatewayV2Client v2Client,
                                 String region, String stage) {
-        super();
+        this.builders = new ArrayList<>();
+        initBuilders(v1Client, v2Client, region, stage);
+    }
+
+    private void initBuilders(ApiGatewayClient v1Client, ApiGatewayV2Client v2Client,
+                                String region, String stage) {
         registerBuilder(new AWSRestAPIBuilder(v1Client, region, stage));
         registerBuilder(new AWSHTTPAPIBuilder(v2Client, region, stage));
         registerBuilder(new AWSWebSocketAPIBuilder(v2Client, region, stage));
     }
 
     /**
-     * Returns the builder as {@link AWSAPIBuilder} to provide access to
-     * AWS-specific methods like {@code createReferenceArtifact()}.
+     * Returns the first registered builder that can handle the given raw API data.
+     *
+     * @param sourceApi The raw API data from the gateway (e.g., {@code RestApi} or {@code Api})
+     * @return The matching {@link AWSAPIBuilder}
+     * @throws IllegalStateException if no registered builder can handle the given type
      */
-    @Override
-    public AWSAPIBuilder getBuilder(Object sourceApi) {
-        return (AWSAPIBuilder) super.getBuilder(sourceApi);
+    public AWSAPIBuilder<?> getBuilder(Object sourceApi) {
+        for (AWSAPIBuilder<?> builder : builders) {
+            if (builder.canHandle(sourceApi)) {
+                return builder;
+            }
+        }
+        throw new IllegalStateException("No registered builder can handle the given API data");
+    }
+    
+    /**
+     * Registers a builder in the factory. Duplicate types (same class) are ignored.
+     *
+     * @param builder The builder to register
+     */
+    protected void registerBuilder(AWSAPIBuilder<?> builder) {
+        if (builder == null) {
+            return;
+        }
+        for (AWSAPIBuilder<?> existing : builders) {
+            if (existing.getClass().equals(builder.getClass())) {
+                return;
+            }
+        }
+        builders.add(builder);
+    }
+    
+    /**
+     * Gets all registered builders.
+     * Useful for testing and debugging.
+     * 
+     * @return List of all registered builders
+     */
+    public List<AWSAPIBuilder<?>> getRegisteredBuilders() {
+        return new ArrayList<>(builders);
+    }
+    
+    /**
+     * Gets the count of registered builders.
+     * 
+     * @return Number of registered builders
+     */
+    public int getBuilderCount() {
+        return builders.size();
     }
 }

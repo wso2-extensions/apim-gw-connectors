@@ -48,7 +48,7 @@ import software.amazon.awssdk.services.apigatewayv2.model.ProtocolType;
  * an {@link APIManagementException} is thrown from {@code mapSpecificDetails()}, which the
  * discovery service catches and logs at debug level.
  */
-public class AWSHTTPAPIBuilder extends AWSAPIBuilder {
+public class AWSHTTPAPIBuilder extends AWSAPIBuilder<Api> {
 
     private static final Log log = LogFactory.getLog(AWSHTTPAPIBuilder.class);
 
@@ -68,41 +68,35 @@ public class AWSHTTPAPIBuilder extends AWSAPIBuilder {
     }
 
     @Override
-    protected String getName(Object sourceApi) {
-        Api a = (Api) sourceApi;
+    protected String getName(Api sourceApi) {
+        Api a = sourceApi;
         return a.name() != null ? a.name() : a.apiId();
     }
 
     @Override
-    protected String getVersion(Object sourceApi) {
-        Api a = (Api) sourceApi;
+    protected String getVersion(Api sourceApi) {
+        Api a = sourceApi;
         return a.version() != null ? a.version() : AWSConstants.DEFAULT_VERSION;
     }
 
     @Override
-    protected String getContext(Object sourceApi) {
+    protected String getContext(Api sourceApi) {
         return "/" + getName(sourceApi).toLowerCase().replace(" ", "-");
     }
 
     @Override
-    protected String getContextTemplate(Object sourceApi) {
+    protected String getContextTemplate(Api sourceApi) {
         return getContext(sourceApi) + "/{version}";
     }
 
     @Override
-    protected String getGatewayId(Object sourceApi) {
-        return ((Api) sourceApi).apiId();
+    protected String getDescription(Api sourceApi) {
+        return sourceApi.description() != null ? sourceApi.description() : "";
     }
 
     @Override
-    protected String getDescription(Object sourceApi) {
-        Api a = (Api) sourceApi;
-        return a.description() != null ? a.description() : "";
-    }
-
-    @Override
-    protected void mapSpecificDetails(API api, Object sourceApi, Environment env) throws APIManagementException {
-        Api v2Api = (Api) sourceApi;
+    protected void mapSpecificDetails(API api, Api sourceApi, Environment env) throws APIManagementException {
+        Api v2Api = sourceApi;
         api.setType(AWSConstants.API_TYPE_HTTP);
         api.setTransports(AWSConstants.HTTP_TRANSPORTS);
 
@@ -121,8 +115,8 @@ public class AWSHTTPAPIBuilder extends AWSAPIBuilder {
     }
 
     @Override
-    public String createReferenceArtifact(Object rawApi) {
-        Api v2Api = (Api) rawApi;
+    public String createReferenceArtifact(Api rawApi) {
+        Api v2Api = rawApi;
         String swagger = "{}";
         try {
             swagger = getOASDefinition(v2Api.apiId(), getName(rawApi));
