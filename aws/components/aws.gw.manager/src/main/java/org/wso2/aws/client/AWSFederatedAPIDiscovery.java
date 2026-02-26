@@ -23,10 +23,10 @@ package org.wso2.aws.client;
 import com.google.gson.JsonObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.aws.client.util.AWSAPIUtil;
+import org.wso2.aws.client.builder.AWSAPIBuilderFactory;
+import org.wso2.aws.client.discovery.AWSDiscoveryService;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedAPIDiscovery;
-import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.DiscoveredAPI;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -35,11 +35,10 @@ import software.amazon.awssdk.http.SdkHttpClient;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient;
-import software.amazon.awssdk.services.apigateway.model.RestApi;
+import software.amazon.awssdk.services.apigatewayv2.ApiGatewayV2Client;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import static org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants.DEPLOYMENT_NAME;
 import static org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants.DEPLOYMENT_VHOST;
@@ -47,14 +46,15 @@ import static org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants.DIS
 
 /**
  * Represents the federated API discovery implementation for AWS API Gateway.
- * This class is responsible for discovering REST APIs deployed on AWS API Gateway
- * and integrating them with the API management system.
+ * This class is responsible for discovering REST APIs (V1) and WebSocket APIs (V2)
+ * deployed on AWS API Gateway and integrating them with the API management system.
  *
- * It includes methods for initializing the discovery process, fetching
- * deployed APIs, and evaluating whether an API has been updated.
+ * <p>Uses the builder factory pattern to delegate API construction to type-specific
+ * builders ({@link org.wso2.aws.client.builder.AWSRestAPIBuilder} for REST,
+ * {@link org.wso2.aws.client.builder.AWSWebSocketAPIBuilder} for WebSocket).
  *
- * This implementation works in conjunction with AWS API Gateway and uses
- * AWS SDK for Java for API interactions.
+ * <p>REST APIs are discovered via API Gateway V1 ({@link ApiGatewayClient})
+ * and WebSocket APIs via API Gateway V2 ({@link ApiGatewayV2Client}).
  */
 public class AWSFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
@@ -62,6 +62,7 @@ public class AWSFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
     private Environment environment;
     private ApiGatewayClient apiGatewayClient;
+    private ApiGatewayV2Client apiGatewayV2Client;
     private String organization;
     private String region;
     private String stage;
@@ -85,11 +86,19 @@ public class AWSFederatedAPIDiscovery implements FederatedAPIDiscovery {
             }
 
             SdkHttpClient httpClient = ApacheHttpClient.builder().build();
+            StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(accessKey, secretKey));
+
             this.apiGatewayClient = ApiGatewayClient.builder()
                     .region(Region.of(region))
                     .httpClient(httpClient)
-                    .credentialsProvider(StaticCredentialsProvider.create(
-                            AwsBasicCredentials.create(accessKey, secretKey)))
+                    .credentialsProvider(credentialsProvider)
+                    .build();
+
+            this.apiGatewayV2Client = ApiGatewayV2Client.builder()
+                    .region(Region.of(region))
+                    .httpClient(httpClient)
+                    .credentialsProvider(credentialsProvider)
                     .build();
 
             this.deploymentConfigObject = new JsonObject();
@@ -105,20 +114,22 @@ public class AWSFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
     @Override
     public List<DiscoveredAPI> discoverAPI() {
-        List<RestApi> restApis = AWSAPIUtil.getRestApis(apiGatewayClient);
+        AWSAPIBuilderFactory factory = new AWSAPIBuilderFactory(apiGatewayClient, apiGatewayV2Client, region, stage);
+        AWSDiscoveryService discoveryService = new AWSDiscoveryService();
         List<DiscoveredAPI> retrievedAPIs = new ArrayList<>();
-        for (RestApi restApi : restApis) {
-            String apiStage = AWSAPIUtil.getStageNames(apiGatewayClient, restApi.id());
-            if (!Objects.equals(apiStage, stage)) {
-                continue;
-            }
-            String apiDefinition = AWSAPIUtil.getRestApiDefinition(apiGatewayClient, restApi.id(), stage);
-            API api = AWSAPIUtil.restAPItoAPI(restApi, apiDefinition, organization, environment);
-            AWSAPIUtil.setEndpointConfig(api, restApi, apiGatewayClient);
-            DiscoveredAPI discoveredAPI = new DiscoveredAPI(api,
-                    AWSAPIUtil.createReferenceArtifact(restApi,apiDefinition));
-            retrievedAPIs.add(discoveredAPI);
-        }
+
+        // Discover V1 REST APIs (paginator streams page-by-page)
+        discoveryService.discover(
+                apiGatewayClient.getRestApisPaginator().items(),
+                factory, environment, organization,
+                retrievedAPIs::add);
+
+        // Discover V2 APIs — factory dispatches HTTP vs WebSocket via canHandle()
+        discoveryService.discover(
+                apiGatewayV2Client.getApis().items(),
+                factory, environment, organization,
+                retrievedAPIs::add);
+
         return retrievedAPIs;
     }
 

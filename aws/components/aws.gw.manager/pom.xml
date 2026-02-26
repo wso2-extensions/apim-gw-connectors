@@ -45,6 +45,7 @@
                         <Import-Package>
                             org.wso2.carbon.apimgt.api.*; version="[9.0,10.0)",
                             software.amazon.awssdk.services.apigateway.*; version="${software.amazon.awssdk.version.range}",
+                            software.amazon.awssdk.services.apigatewayv2.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.core.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.auth.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.http.*; version="${software.amazon.awssdk.version.range}",

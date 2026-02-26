@@ -30,8 +30,6 @@ import org.json.simple.parser.JSONParser;
 import org.wso2.aws.client.AWSConstants;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
-import org.wso2.carbon.apimgt.api.model.APIIdentifier;
-import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import software.amazon.awssdk.core.SdkBytes;
@@ -48,16 +46,12 @@ import software.amazon.awssdk.services.apigateway.model.GetDeploymentsRequest;
 import software.amazon.awssdk.services.apigateway.model.GetDeploymentsResponse;
 import software.amazon.awssdk.services.apigateway.model.GetExportRequest;
 import software.amazon.awssdk.services.apigateway.model.GetExportResponse;
-import software.amazon.awssdk.services.apigateway.model.GetIntegrationRequest;
-import software.amazon.awssdk.services.apigateway.model.GetIntegrationResponse;
 import software.amazon.awssdk.services.apigateway.model.GetMethodRequest;
 import software.amazon.awssdk.services.apigateway.model.GetMethodResponse;
 import software.amazon.awssdk.services.apigateway.model.GetResourcesRequest;
 import software.amazon.awssdk.services.apigateway.model.GetResourcesResponse;
 import software.amazon.awssdk.services.apigateway.model.GetRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.GetRestApiResponse;
-import software.amazon.awssdk.services.apigateway.model.GetRestApisRequest;
-import software.amazon.awssdk.services.apigateway.model.GetRestApisResponse;
 import software.amazon.awssdk.services.apigateway.model.GetStagesRequest;
 import software.amazon.awssdk.services.apigateway.model.GetStagesResponse;
 import software.amazon.awssdk.services.apigateway.model.ImportRestApiRequest;
@@ -74,9 +68,13 @@ import software.amazon.awssdk.services.apigateway.model.PutRestApiResponse;
 import software.amazon.awssdk.services.apigateway.model.Resource;
 import software.amazon.awssdk.services.apigateway.model.RestApi;
 import software.amazon.awssdk.services.apigateway.model.UpdateMethodRequest;
+import software.amazon.awssdk.services.apigatewayv2.ApiGatewayV2Client;
+import software.amazon.awssdk.services.apigatewayv2.model.GetRoutesRequest;
+import software.amazon.awssdk.services.apigatewayv2.model.GetRoutesResponse;
+import software.amazon.awssdk.services.apigatewayv2.model.Route;
+
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +82,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.wso2.aws.client.AWSConstants.DEFAULT_VERSION;
 import static org.wso2.aws.client.AWSConstants.JSON_PAYLOAD_TYPE;
 import static org.wso2.aws.client.AWSConstants.OPEN_API_VERSION;
 import static org.wso2.aws.client.AWSConstants.PRODUCTION_ENDPOINTS;
@@ -539,20 +536,6 @@ public class AWSAPIUtil {
     }
 
     /**
-     * This method is used to get Rest APIs from AWS API Gateway.
-     *
-     * @param client APIGatewayClient object
-     * @return List of RestApi objects
-     */
-    public static List<RestApi> getRestApis(ApiGatewayClient client) {
-
-        GetRestApisRequest restApisRequest = GetRestApisRequest.builder().build();
-        GetRestApisResponse restApisResponse = client.getRestApis(restApisRequest);
-        return restApisResponse.items();
-    }
-
-
-    /**
      * This method is used to get the API definition from AWS API Gateway.
      *
      * @param client APIGatewayClient object
@@ -562,12 +545,64 @@ public class AWSAPIUtil {
     public static String getRestApiDefinition(ApiGatewayClient client, String apiId, String stage) {
         GetExportRequest getExportRequest = GetExportRequest.builder()
                 .restApiId(apiId)
-                .stageName(stage) // Assuming a default stage or make it configurable
-                .exportType(OPEN_API_VERSION) // Or "oas30" for OpenAPI 3.0
+                .stageName(stage)
+                .exportType(OPEN_API_VERSION)
                 .accepts(JSON_PAYLOAD_TYPE)
                 .build();
         GetExportResponse getExportResponse = client.getExport(getExportRequest);
-        return getExportResponse.body().asUtf8String();
+        String rawDefinition = getExportResponse.body().asUtf8String();
+        return resolveServerVariables(rawDefinition);
+    }
+
+    /**
+     * Resolves server URL variables in the OpenAPI definition returned by AWS API Gateway.
+     * <p>
+     * AWS exports OpenAPI definitions with server URLs containing variables like:
+     * {@code https://{restapi_id}.execute-api.{region}.amazonaws.com/{basePath}}
+     * <p>
+     * This method resolves those variables using their default values from the "variables" block,
+     * producing a fully resolved URL like:
+     * {@code https://abc123.execute-api.us-east-1.amazonaws.com/dev}
+     * <p>
+     * It also removes the "variables" block after resolution since it's no longer needed.
+     *
+     * @param apiDefinition The raw OpenAPI definition JSON string from AWS
+     * @return The OpenAPI definition with resolved server URLs
+     */
+    public static String resolveServerVariables(String apiDefinition) {
+        if (apiDefinition == null || apiDefinition.isEmpty()) {
+            return apiDefinition;
+        }
+        try {
+            JsonObject root = JsonParser.parseString(apiDefinition).getAsJsonObject();
+            if (!root.has("servers") || !root.get("servers").isJsonArray()) {
+                return apiDefinition;
+            }
+            JsonArray servers = root.getAsJsonArray("servers");
+            for (int i = 0; i < servers.size(); i++) {
+                JsonObject server = servers.get(i).getAsJsonObject();
+                if (!server.has("url") || !server.has("variables")) {
+                    continue;
+                }
+                String url = server.get("url").getAsString();
+                JsonObject variables = server.getAsJsonObject("variables");
+                // Replace each {variableName} with its default value
+                for (String varName : variables.keySet()) {
+                    JsonObject varObj = variables.getAsJsonObject(varName);
+                    if (varObj != null && varObj.has("default")) {
+                        String defaultValue = varObj.get("default").getAsString();
+                        url = url.replace("{" + varName + "}", defaultValue);
+                    }
+                }
+                server.addProperty("url", url);
+                // Remove the variables block — no longer needed after resolution
+                server.remove("variables");
+            }
+            return root.toString();
+        } catch (Exception e) {
+            log.warn("Failed to resolve server variables in API definition, returning raw definition", e);
+            return apiDefinition;
+        }
     }
 
     /**
@@ -587,87 +622,42 @@ public class AWSAPIUtil {
     }
 
     /**
-     * Converts a RestApi object to an API object.
-     *
-     * @param restApi       The RestApi object to convert.
-     * @param apiDefinition The OpenAPI definition of the API.
-     * @param organization  The organization name.
-     * @param environment   The environment in which the API is deployed.
-     * @return An API object representing the RestApi.
-     */
-    public static API restAPItoAPI(RestApi restApi, String apiDefinition, String organization,
-                                   Environment environment) {
-        String name = restApi.name() == null ? restApi.id() : restApi.name();
-        String version = restApi.version() == null ? DEFAULT_VERSION : restApi.version();
-        APIIdentifier apiIdentifier = new APIIdentifier("admin", name, version);
-        API api = new API(apiIdentifier);
-        api.setDisplayName(restApi.name());
-        api.setUuid(restApi.id());
-        api.setDescription(restApi.description());
-        api.setContext(restApi.name().toLowerCase().replace(" ", "-"));
-        api.setContextTemplate(restApi.name().toLowerCase().replace(" ", "-"));
-        api.setOrganization(organization);
-        api.setSwaggerDefinition(apiDefinition);
-        api.setRevision(false);
-        api.setLastUpdated(Date.from(restApi.createdDate()));
-        api.setCreatedTime(Long.toString(restApi.createdDate().toEpochMilli()));
-        api.setInitiatedFromGateway(true);
-        api.setGatewayVendor("external");
-        api.setEnableSubscriberVerification(false);
-        api.setGatewayType(environment.getGatewayType());
-        return api;
-    }
-
-    /**
      * Sets the endpoint configuration for the API based on the provided RestApi.
+     * Constructs the public-facing API Gateway invoke URL using the api ID, region, and stage,
+     * since AWS SDK does not expose the invoke URL directly.
      *
      * @param api     The API object to set the endpoint configuration for.
      * @param restApi The RestApi object containing endpoint information.
-     * @param client  The ApiGatewayClient to interact with AWS API Gateway.
+     * @param region  The AWS region where the API Gateway is deployed (e.g., "us-east-1").
+     * @param stage   The deployment stage name (e.g., "prod", "dev").
      */
-    public static void setEndpointConfig(API api, RestApi restApi, ApiGatewayClient client) {
-        String restApiId = restApi.id();
-        String endpointUrls = getEndpointUrls(restApiId, client);
-        if (endpointUrls != null) {
-            JsonObject endpointConfig = new JsonObject();
-            endpointConfig.addProperty("endpoint_type", "http");
+    public static void setEndpointConfig(API api, RestApi restApi, String region, String stage) {
+        String invokeUrl = getEndpointUrl(restApi.id(), region, stage);
+        JsonObject endpointConfig = new JsonObject();
+        endpointConfig.addProperty("endpoint_type", "http");
 
-            JsonObject prod = new JsonObject();
-            prod.addProperty(URL_PROP, endpointUrls);
+        JsonObject prod = new JsonObject();
+        prod.addProperty(URL_PROP, invokeUrl);
 
-            JsonObject sand = new JsonObject();
-            sand.addProperty(URL_PROP, endpointUrls);
-            endpointConfig.add(PRODUCTION_ENDPOINTS, prod);
-            endpointConfig.add(SANDBOX_ENDPOINTS, sand);
-            api.setEndpointConfig(endpointConfig.toString());
-        } else {
-            log.warn("No endpoint URLs found for API: " + restApi.name());
-        }
+        JsonObject sand = new JsonObject();
+        sand.addProperty(URL_PROP, invokeUrl);
+        endpointConfig.add(PRODUCTION_ENDPOINTS, prod);
+        endpointConfig.add(SANDBOX_ENDPOINTS, sand);
+        api.setEndpointConfig(endpointConfig.toString());
     }
 
-    private static String getEndpointUrls(String restApiId, ApiGatewayClient client) {
-        GetResourcesResponse resources = client.getResources(GetResourcesRequest.builder()
-                .restApiId(restApiId)
-                .build());
-
-        if (resources.hasItems() && resources.items().get(0).resourceMethods() != null
-                && !resources.items().get(0).resourceMethods().isEmpty()) {
-            String httpMethod = resources.items().get(0).resourceMethods()
-                    .keySet()
-                    .iterator()
-                    .next()
-                    .toString();
-            GetIntegrationRequest request = GetIntegrationRequest.builder()
-                    .restApiId(restApiId)
-                    .resourceId(resources.items().get(0).id())
-                    .httpMethod(httpMethod)
-                    .build();
-
-            GetIntegrationResponse response = client.getIntegration(request);
-            return response.uri();
-        } else {
-            return null;
-        }
+    /**
+     * Constructs the public-facing API Gateway invoke URL.
+     * AWS does not provide a direct field for this; it must be built from the API ID, region, and stage.
+     * Format: https://{api-id}.execute-api.{region}.amazonaws.com/{stage}
+     *
+     * @param restApiId The REST API identifier.
+     * @param region    The AWS region (e.g., "us-east-1").
+     * @param stage     The deployment stage name.
+     * @return The fully constructed invoke URL.
+     */
+    private static String getEndpointUrl(String restApiId, String region, String stage) {
+        return String.format("https://%s.execute-api.%s.amazonaws.com/%s", restApiId, region, stage);
     }
 
     /**
@@ -699,5 +689,174 @@ public class AWSAPIUtil {
         if (restApi != null) {
             apiGatewayClient.deleteRestApi(DeleteRestApiRequest.builder().restApiId(referenceArtifact).build());
         }
+    }
+
+    // ========================================================================
+    // API Gateway V2 methods (WebSocket API support)
+    // ========================================================================
+
+    /**
+     * Sets endpoint configuration on an API using a pre-built URL.
+     * Used by V2 HTTP API builder where the URL is constructed from the V2 API ID.
+     *
+     * @param api The WSO2 API object to configure.
+     * @param invokeUrl The fully constructed invoke URL.
+     */
+    public static void setEndpointConfigFromUrl(API api, String invokeUrl) {
+        JsonObject endpointConfig = new JsonObject();
+        endpointConfig.addProperty("endpoint_type", "http");
+
+        JsonObject prod = new JsonObject();
+        prod.addProperty(URL_PROP, invokeUrl);
+        JsonObject sand = new JsonObject();
+        sand.addProperty(URL_PROP, invokeUrl);
+
+        endpointConfig.add(PRODUCTION_ENDPOINTS, prod);
+        endpointConfig.add(SANDBOX_ENDPOINTS, sand);
+        api.setEndpointConfig(endpointConfig.toString());
+    }
+
+    /**
+     * Retrieves all routes for a given V2 WebSocket API.
+     *
+     * @param client The ApiGatewayV2Client instance.
+     * @param apiId  The V2 API identifier.
+     * @return List of Route objects (e.g., $connect, $disconnect, $default, custom routes).
+     */
+    public static List<Route> getWebSocketRoutes(ApiGatewayV2Client client, String apiId) {
+        GetRoutesRequest request = GetRoutesRequest.builder().apiId(apiId).build();
+        GetRoutesResponse response = client.getRoutes(request);
+        return response.items();
+    }
+
+    /**
+     * Checks whether a specific deployment stage exists for a V2 API.
+     *
+     * @param client    The ApiGatewayV2Client instance.
+     * @param apiId     The V2 API identifier.
+     * @param stageName The stage name to check for.
+     * @return true if the stage exists, false otherwise.
+     */
+    public static boolean hasStage(ApiGatewayV2Client client, String apiId, String stageName) {
+        try {
+            software.amazon.awssdk.services.apigatewayv2.model.GetStagesRequest request =
+                    software.amazon.awssdk.services.apigatewayv2.model.GetStagesRequest.builder()
+                            .apiId(apiId).build();
+            software.amazon.awssdk.services.apigatewayv2.model.GetStagesResponse response =
+                    client.getStages(request);
+            for (software.amazon.awssdk.services.apigatewayv2.model.Stage stage : response.items()) {
+                if (stageName.equals(stage.stageName())) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to check stages for V2 API: " + apiId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Constructs the public WebSocket endpoint URL for an AWS API Gateway V2 WebSocket API.
+     * Format: wss://{api-id}.execute-api.{region}.amazonaws.com/{stage}
+     *
+     * @param apiId  The V2 API identifier.
+     * @param region The AWS region (e.g., "us-east-1").
+     * @param stage  The deployment stage name.
+     * @return The fully constructed WebSocket endpoint URL.
+     */
+    public static String getWebSocketEndpointUrl(String apiId, String region, String stage) {
+        return String.format("wss://%s.execute-api.%s.amazonaws.com/%s", apiId, region, stage);
+    }
+
+    /**
+     * Builds an AsyncAPI 2.6.0 definition from AWS WebSocket API routes.
+     * This is necessary because AWS API Gateway V2 does not export AsyncAPI definitions natively.
+     *
+     * @param apiName   The API display name.
+     * @param version   The API version.
+     * @param serverUrl The WebSocket server URL.
+     * @param routes    The list of WebSocket routes.
+     * @return The AsyncAPI definition as a JSON string.
+     */
+    public static String buildAsyncApiDefinition(String apiName, String version,
+                                                  String serverUrl, List<Route> routes) {
+        JsonObject asyncApi = new JsonObject();
+        asyncApi.addProperty("asyncapi", AWSConstants.ASYNC_API_VERSION);
+
+        JsonObject info = new JsonObject();
+        info.addProperty("title", apiName);
+        info.addProperty("version", version != null ? version : AWSConstants.DEFAULT_VERSION);
+        asyncApi.add("info", info);
+
+        JsonObject servers = new JsonObject();
+        JsonObject production = new JsonObject();
+        production.addProperty("url", serverUrl);
+        production.addProperty("protocol", AWSConstants.PROTOCOL_WSS);
+        servers.add("production", production);
+        asyncApi.add("servers", servers);
+
+        JsonObject channels = new JsonObject();
+        if (routes != null) {
+            for (Route route : routes) {
+                String routeKey = route.routeKey();
+                JsonObject channel = new JsonObject();
+
+                JsonObject publish = new JsonObject();
+                publish.addProperty("operationId", routeKey);
+                JsonObject message = new JsonObject();
+                JsonObject payload = new JsonObject();
+                payload.addProperty("type", "object");
+                message.add("payload", payload);
+                publish.add("message", message);
+                channel.add("publish", publish);
+
+                channels.add(routeKey, channel);
+            }
+        }
+        asyncApi.add("channels", channels);
+
+        return new Gson().toJson(asyncApi);
+    }
+
+    /**
+     * Builds the WebSocket endpoint configuration JSON string.
+     *
+     * @param apiId  The V2 API identifier.
+     * @param region The AWS region.
+     * @param stage  The deployment stage name.
+     * @return The endpoint configuration JSON string.
+     */
+    public static String buildWebSocketEndpointConfig(String apiId, String region, String stage) {
+        String wsUrl = getWebSocketEndpointUrl(apiId, region, stage);
+        JsonObject endpointConfig = new JsonObject();
+        endpointConfig.addProperty("endpoint_type", AWSConstants.ENDPOINT_TYPE_WS);
+
+        JsonObject prod = new JsonObject();
+        prod.addProperty(URL_PROP, wsUrl);
+        JsonObject sand = new JsonObject();
+        sand.addProperty(URL_PROP, wsUrl);
+
+        endpointConfig.add(PRODUCTION_ENDPOINTS, prod);
+        endpointConfig.add(SANDBOX_ENDPOINTS, sand);
+        return endpointConfig.toString();
+    }
+
+    /**
+     * Creates a reference artifact for a V2 WebSocket API (Api + routes).
+     *
+     * @param webSocketApi The V2 Api object.
+     * @param routes       The list of routes (may be empty).
+     * @return JSON string representing the reference artifact.
+     */
+    public static String createReferenceArtifact(software.amazon.awssdk.services.apigatewayv2.model.Api webSocketApi,
+                                                 java.util.List<software.amazon.awssdk.services.apigatewayv2.model.Route> routes) {
+        Gson G = new Gson();
+        JsonArray arr = new JsonArray();
+        arr.add(G.toJsonTree(webSocketApi));
+        if (routes != null) {
+            arr.add(G.toJsonTree(routes));
+        }
+        return G.toJson(arr);
     }
 }
