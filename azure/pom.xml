@@ -124,6 +124,11 @@
                 <version>${carbon.apimgt.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.wso2.carbon.apimgt</groupId>
+                <artifactId>org.wso2.carbon.apimgt.spec.parser</artifactId>
+                <version>${carbon.apimgt.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.wso2.orbit.com.azure.resourcemanager</groupId>
                 <artifactId>azure-resourcemanager-apimanagement</artifactId>
                 <version>${org.wso2.orbit.azure.resourcemanager.apimanagement.version}</version>
@@ -154,7 +159,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.scm.id>scm-server</project.scm.id>
         <carbon.p2.plugin.version>1.5.3</carbon.p2.plugin.version>
-        <carbon.apimgt.version>9.32.74</carbon.apimgt.version>
+        <carbon.apimgt.version>9.33.24-SNAPSHOT</carbon.apimgt.version>
         <org.wso2.orbit.azure.resourcemanager.apimanagement.version>2.0.0.wso2v4</org.wso2.orbit.azure.resourcemanager.apimanagement.version>
         <maven.checkstyle.plugin.version>3.0.0</maven.checkstyle.plugin.version>
     </properties>

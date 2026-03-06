@@ -23,6 +23,8 @@ import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
 import com.azure.resourcemanager.apimanagement.models.ApiType;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.azure.gw.client.AzureConstants;
 import org.wso2.azure.gw.client.util.AzureAPIUtil;
 import org.wso2.carbon.apimgt.api.APIManagementException;
@@ -35,6 +37,7 @@ import org.wso2.carbon.apimgt.api.model.Environment;
  * Only implements API-type-specific logic for REST APIs.
  */
 public class AzureRestAPIBuilder extends AzureAPIBuilder {
+    private static final Log log = LogFactory.getLog(AzureRestAPIBuilder.class);
 
     public AzureRestAPIBuilder(ApiManagementManager manager, HttpClient httpClient,
                               String resourceGroup, String serviceName) {
@@ -43,7 +46,17 @@ public class AzureRestAPIBuilder extends AzureAPIBuilder {
 
     @Override
     public boolean canHandle(ApiContract sourceApi) {
-        return sourceApi.apiType() == null || ApiType.HTTP.equals(sourceApi.apiType());
+        if (sourceApi.apiType() != null && !ApiType.HTTP.equals(sourceApi.apiType())) {
+            return false;
+        }
+        try {
+            return AzureAPIUtil.hasResources(
+                    AzureAPIUtil.getRestApiDefinition(this.manager, this.httpClient, sourceApi));
+        } catch (APIManagementException | IllegalStateException e) {
+            log.error(String.format("Error while extracting API definition from Azure REST API: %s",
+                    sourceApi.name()), e);
+            return false;
+        }
     }
 
     @Override

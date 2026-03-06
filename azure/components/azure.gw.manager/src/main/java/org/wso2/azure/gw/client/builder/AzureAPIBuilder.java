@@ -21,14 +21,13 @@ package org.wso2.azure.gw.client.builder;
 import com.azure.core.http.HttpClient;
 import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
-
-import java.util.UUID;
-
 import org.wso2.azure.gw.client.AzureConstants;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.Environment;
+
+import java.util.UUID;
 
 /**
  * Abstract base class for Azure API builders.
@@ -124,7 +123,8 @@ public abstract class AzureAPIBuilder {
      * @param sourceApi The raw data object.
      * @throws APIManagementException If an error occurs during mapping.
      */
-    protected abstract void mapSpecificDetails(API api, ApiContract sourceApi, Environment env) throws APIManagementException;
+    protected abstract void mapSpecificDetails(API api, ApiContract sourceApi, Environment env)
+            throws APIManagementException;
 
     /**
      * Checks if this builder can handle the given raw data object.
