@@ -1,9 +1,9 @@
 {
   "Azure": {
-    "apiTypes": ["rest"],
+    "apiTypes": ["rest","ws"],
     "gatewayFeatures": {
       "basic": [],
-      "runtime": ["cors", "transportsHTTP", "transportsHTTPS"],
+      "runtime": ["cors", "transportsHTTP", "transportsHTTPS","transportsWS","transportsWSS"],
       "resources": [],
       "localScopes": [],
       "policies": ["policies"],
