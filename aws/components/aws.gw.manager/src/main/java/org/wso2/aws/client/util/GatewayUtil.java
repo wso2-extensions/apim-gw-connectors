@@ -63,6 +63,7 @@ import java.util.regex.Pattern;
 public class GatewayUtil {
 
     private static final Pattern VALID_PATH_PATTERN = Pattern.compile("^[a-zA-Z0-9-._~%!$&'()*+,;=:@/]*$");
+    private static final String AWS_API_KEY_HEADER = "x-api-key";
 
     public static String getAWSApiIdFromReferenceArtifact(String referenceArtifact) throws APIManagementException {
         Pattern pattern = Pattern.compile(AWSConstants.AWS_ID_PATTERN);
@@ -240,8 +241,8 @@ public class GatewayUtil {
         CreateAuthorizerRequest createAuthorizerRequest = CreateAuthorizerRequest.builder()
                 .restApiId(awsApiId)
                 .name(name + "-authorizer")
-                .type(AuthorizerType.TOKEN)
-                .identitySource("method.request.header.Authorization")
+                .type(AuthorizerType.REQUEST)
+                .identitySource("method.request.header." + AWS_API_KEY_HEADER)
                 .authorizerUri("arn:aws:apigateway:" + region + ":lambda:path/2015-03-31/functions/" + lambdaArn +
                         "/invocations")
                 .authorizerCredentials(roleArn)

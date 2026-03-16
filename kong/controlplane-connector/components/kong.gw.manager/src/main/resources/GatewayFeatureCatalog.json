@@ -30,6 +30,9 @@
       "subscriptions": [
         "subscriptions"
       ],
+      "apiKeys": {
+        "supported": false
+      },
       "endpoints": [
         "http",
         "typePRODUCTION",

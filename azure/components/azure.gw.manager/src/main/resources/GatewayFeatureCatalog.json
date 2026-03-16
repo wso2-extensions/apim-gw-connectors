@@ -9,6 +9,9 @@
       "policies": ["policies"],
       "monetization": [],
       "subscriptions": [],
+      "apiKeys": {
+        "supported": false
+      },
       "endpoints": ["http", "typePRODUCTION"],
       "endpointSecurity": [],
       "tryout": []

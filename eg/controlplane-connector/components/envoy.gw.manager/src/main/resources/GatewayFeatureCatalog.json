@@ -23,6 +23,9 @@
       "policies": [],
       "monetization": [],
       "subscriptions": [],
+      "apiKeys": {
+        "supported": false
+      },
       "endpoints": [
         "typePRODUCTION",
         "typeSANDBOX"

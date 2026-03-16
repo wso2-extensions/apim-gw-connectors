@@ -17,6 +17,19 @@
       ],
       "monetization": [],
       "subscriptions": [],
+      "apiKeys": {
+        "supported": true,
+        "federated": true,
+        "operations": [
+          "issue",
+          "regenerate",
+          "revoke",
+          "associate",
+          "dissociate"
+        ],
+        "associationRequiredForInvocation": true,
+        "headerName": "ApiKey"
+      },
       "endpoints": [
         "http",
         "typePRODUCTION"
