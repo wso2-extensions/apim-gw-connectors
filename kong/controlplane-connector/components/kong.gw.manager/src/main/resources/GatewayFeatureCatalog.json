@@ -27,9 +27,7 @@
       "monetization": [
         "monetization"
       ],
-      "subscriptions": [
-        "subscriptions"
-      ],
+      "subscriptions": [],
       "apiKeys": {
         "supported": false
       },
@@ -41,7 +39,13 @@
       "endpointSecurity": [
         "basicAuth"
       ],
-      "tryout": []
+      "tryout": [],
+      "federatedSubscription": {
+        "subcriptionSupport": false,
+        "credentialSchema": null,
+        "invocationSchema": null,
+        "subcriptionOptionsSchema": null
+      }
     }
   }
 }

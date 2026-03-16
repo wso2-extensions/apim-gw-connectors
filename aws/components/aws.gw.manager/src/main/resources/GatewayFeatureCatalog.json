@@ -16,7 +16,10 @@
         "policies"
       ],
       "monetization": [],
-      "subscriptions": [],
+      "subscriptions": {
+        "supported": true,
+        "subscriptionless": false
+      },
       "apiKeys": {
         "supported": true,
         "federated": true,
@@ -35,7 +38,13 @@
         "typePRODUCTION"
       ],
       "endpointSecurity": [],
-      "tryout": []
+      "tryout": [],
+      "federatedSubscription": {
+        "subcriptionSupport": true,
+        "credentialSchema": "opaque-api-key",
+        "invocationSchema": "api-key-invocation",
+        "subcriptionOptionsSchema": "subscription-plans"
+      }
     }
   }
 }
