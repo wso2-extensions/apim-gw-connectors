@@ -91,4 +91,7 @@ public class AzureConstants {
     public static final String AZURE_ENVIRONMENT_RESOURCE_GROUP = "resource_group";
     public static final String AZURE_ENVIRONMENT_SERVICE_NAME = "service_name";
     public static final String AZURE_ENVIRONMENT_HOSTNAME = "host_name";
+
+    public static final String AZURE_DEFAULT_SUBSCRIPTION_KEY_HEADER = "Ocp-Apim-Subscription-Key";
+    public static final String AZURE_API_SECURITY_API_KEY = "api_key";
 }

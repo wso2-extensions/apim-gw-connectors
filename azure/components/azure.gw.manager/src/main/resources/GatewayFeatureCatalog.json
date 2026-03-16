@@ -10,7 +10,15 @@
       "monetization": [],
       "subscriptions": [],
       "apiKeys": {
-        "supported": false
+        "supported": true,
+        "federated": true,
+        "operations": [
+          "issue",
+          "regenerate",
+          "revoke"
+        ],
+        "associationRequiredForInvocation": false,
+        "headerName": "Ocp-Apim-Subscription-Key"
       },
       "endpoints": ["http", "typePRODUCTION"],
       "endpointSecurity": [],
