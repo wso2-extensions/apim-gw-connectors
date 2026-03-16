@@ -22,13 +22,7 @@
       },
       "endpoints": ["http", "typePRODUCTION"],
       "endpointSecurity": [],
-      "tryout": [],
-      "federatedSubscription": {
-        "subcriptionSupport": false,
-        "credentialSchema": null,
-        "invocationSchema": null,
-        "subcriptionOptionsSchema": null
-      }
+      "tryout": []
     }
   }
 }

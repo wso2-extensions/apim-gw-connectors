@@ -38,13 +38,7 @@
         "typePRODUCTION"
       ],
       "endpointSecurity": [],
-      "tryout": [],
-      "federatedSubscription": {
-        "subcriptionSupport": true,
-        "credentialSchema": "opaque-api-key",
-        "invocationSchema": "api-key-invocation",
-        "subcriptionOptionsSchema": "subscription-plans"
-      }
+      "tryout": []
     }
   }
 }
