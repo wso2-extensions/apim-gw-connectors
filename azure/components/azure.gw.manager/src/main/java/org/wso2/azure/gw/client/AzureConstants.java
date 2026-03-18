@@ -43,6 +43,8 @@ public class AzureConstants {
     public static final String AZURE_EXTERNAL_REFERENCE_VERSION_SET_ID = "versionSetId";
     public static final String AZURE_EXTERNAL_REFERENCE_VERSIONING_SCHEME = "versioningScheme";
     public static final String AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH = "createdTimeEpoch";
+    public static final String AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED = "apiKeySecurityEnabled";
+    public static final String AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER = "apiKeyHeader";
 
     public static final String AZURE_OPENAPI_EXPORT_VERSION = "2024-05-01";
     public static final String AZURE_OPENAPI_EXPORT_FORMAT = "openapi-link";

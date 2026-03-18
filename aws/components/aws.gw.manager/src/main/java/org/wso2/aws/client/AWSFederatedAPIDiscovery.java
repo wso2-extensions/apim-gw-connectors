@@ -115,8 +115,14 @@ public class AWSFederatedAPIDiscovery implements FederatedAPIDiscovery {
             String apiDefinition = AWSAPIUtil.getRestApiDefinition(apiGatewayClient, restApi.id(), stage);
             API api = AWSAPIUtil.restAPItoAPI(restApi, apiDefinition, organization, environment);
             AWSAPIUtil.setEndpointConfig(api, restApi, apiGatewayClient);
+            AWSAPIUtil.ApiKeySecurityContext apiKeySecurityContext =
+                    AWSAPIUtil.resolveApiKeySecurityContext(restApi.id(), apiGatewayClient);
+            if (apiKeySecurityContext.isEnabled()) {
+                api.setApiSecurity("api_key");
+                api.setApiKeyHeader(apiKeySecurityContext.getHeaderName());
+            }
             DiscoveredAPI discoveredAPI = new DiscoveredAPI(api,
-                    AWSAPIUtil.createReferenceArtifact(restApi,apiDefinition));
+                    AWSAPIUtil.createReferenceArtifact(restApi, apiDefinition, apiKeySecurityContext));
             retrievedAPIs.add(discoveredAPI);
         }
         return retrievedAPIs;

@@ -95,6 +95,9 @@ public class AWSAPIUtil {
     private static final Log log = LogFactory.getLog(AWSAPIUtil.class);
     private static final String API_KEY_SECURITY = "api_key";
     private static final String API_KEY_SOURCE_HEADER = "HEADER";
+    private static final String AWS_API_KEY_HEADER = "x-api-key";
+    private static final String AWS_REFERENCE_API_KEY_ENABLED = "apiKeySecurityEnabled";
+    private static final String AWS_REFERENCE_API_KEY_HEADER = "apiKeyHeader";
 
     public static String importRestAPI(API api, ApiGatewayClient apiGatewayClient, String region,
                                        String stage) throws APIManagementException {
@@ -520,6 +523,39 @@ public class AWSAPIUtil {
         }
     }
 
+    public static ApiKeySecurityContext resolveApiKeySecurityContext(String restApiId, ApiGatewayClient client) {
+        if (restApiId == null || client == null) {
+            return new ApiKeySecurityContext(false, null);
+        }
+        GetResourcesResponse resources = client.getResources(GetResourcesRequest.builder()
+                .restApiId(restApiId)
+                .build());
+        if (resources == null || !resources.hasItems()) {
+            return new ApiKeySecurityContext(false, null);
+        }
+        for (Resource resource : resources.items()) {
+            Map<String, Method> resourceMethods = resource.resourceMethods();
+            if (resourceMethods == null || resourceMethods.isEmpty()) {
+                continue;
+            }
+            for (Map.Entry<String, Method> entry : resourceMethods.entrySet()) {
+                String method = entry.getKey();
+                if ("OPTIONS".equalsIgnoreCase(method)) {
+                    continue;
+                }
+                GetMethodResponse getMethodResponse = client.getMethod(GetMethodRequest.builder()
+                        .restApiId(restApiId)
+                        .resourceId(resource.id())
+                        .httpMethod(method)
+                        .build());
+                if (Boolean.TRUE.equals(getMethodResponse.apiKeyRequired())) {
+                    return new ApiKeySecurityContext(true, AWS_API_KEY_HEADER);
+                }
+            }
+        }
+        return new ApiKeySecurityContext(false, null);
+    }
+
     /**
      * Creates a reference artifact by combining a given RestApi object and its Swagger definition in JSON format.
      *
@@ -527,10 +563,18 @@ public class AWSAPIUtil {
      * @param swaggerDefinitionJson The Swagger/OpenAPI definition of the API in JSON format.
      * @return A JSON string that represents the combined reference artifact.
      */
-    public static String createReferenceArtifact(RestApi restApi, String swaggerDefinitionJson) {
+    public static String createReferenceArtifact(RestApi restApi, String swaggerDefinitionJson,
+                                                 ApiKeySecurityContext apiKeySecurityContext) {
         Gson G = new Gson();
         JsonArray arr = new JsonArray();
-        arr.add(G.toJsonTree(restApi));
+        JsonObject restApiJson = G.toJsonTree(restApi).getAsJsonObject();
+        if (apiKeySecurityContext != null) {
+            restApiJson.addProperty(AWS_REFERENCE_API_KEY_ENABLED, apiKeySecurityContext.isEnabled());
+            if (apiKeySecurityContext.getHeaderName() != null) {
+                restApiJson.addProperty(AWS_REFERENCE_API_KEY_HEADER, apiKeySecurityContext.getHeaderName());
+            }
+        }
+        arr.add(restApiJson);
         arr.add(JsonParser.parseString(swaggerDefinitionJson));
         return G.toJson(arr);
     }
@@ -553,5 +597,23 @@ public class AWSAPIUtil {
 
     private static boolean requiresNativeApiKey(API api) {
         return api != null && api.getApiSecurity() != null && api.getApiSecurity().contains(API_KEY_SECURITY);
+    }
+
+    public static final class ApiKeySecurityContext {
+        private final boolean enabled;
+        private final String headerName;
+
+        public ApiKeySecurityContext(boolean enabled, String headerName) {
+            this.enabled = enabled;
+            this.headerName = headerName;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public String getHeaderName() {
+            return headerName;
+        }
     }
 }

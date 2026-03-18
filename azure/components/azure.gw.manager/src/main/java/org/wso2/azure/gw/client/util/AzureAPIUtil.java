@@ -251,6 +251,14 @@ public class AzureAPIUtil {
         }
         referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH,
                 apiRevisionContract.createdDateTime().toInstant().toEpochMilli());
+        boolean apiKeyEnabled = api.getApiSecurity() != null
+                && api.getApiSecurity().contains(AzureConstants.AZURE_API_SECURITY_API_KEY);
+        referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED,
+                apiKeyEnabled);
+        if (StringUtils.isNotBlank(api.getApiKeyHeader())) {
+            referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER,
+                    api.getApiKeyHeader());
+        }
         Gson gson = new Gson();
         return gson.toJson(referenceArtifact);
     }
@@ -410,7 +418,7 @@ public class AzureAPIUtil {
             api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
                     apiContract.serviceUrl(), apiContract.serviceUrl(), false));
         }
-        api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
+        api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("DefaultSubscriptionless"))));
         return api;
     }
 

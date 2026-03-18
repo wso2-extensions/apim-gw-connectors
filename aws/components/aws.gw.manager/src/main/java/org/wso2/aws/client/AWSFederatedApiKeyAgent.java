@@ -28,6 +28,7 @@ import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
+import org.wso2.carbon.apimgt.api.model.RemotePlan;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.SdkHttpClient;
@@ -43,7 +44,9 @@ import software.amazon.awssdk.services.apigateway.model.GetUsagePlansRequest;
 import software.amazon.awssdk.services.apigateway.model.GetUsagePlansResponse;
 import software.amazon.awssdk.services.apigateway.model.UsagePlan;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -186,6 +189,46 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
         } catch (Exception e) {
             throw new APIManagementException("Error removing API key usage plan associations in AWS", e);
         }
+    }
+
+    @Override
+    public List<RemotePlan> listRemotePlans(Environment environment) throws APIManagementException {
+        List<RemotePlan> remotePlans = new ArrayList<>();
+        try {
+            String position = null;
+            do {
+                GetUsagePlansRequest request = GetUsagePlansRequest.builder()
+                        .limit(500)
+                        .position(position)
+                        .build();
+                GetUsagePlansResponse response = apiGatewayClient.getUsagePlans(request);
+                for (UsagePlan plan : response.items()) {
+                    Map<String, String> limits = new HashMap<>();
+                    if (plan.throttle() != null) {
+                        if (plan.throttle().rateLimit() != null) {
+                            limits.put("rateLimit", String.valueOf(plan.throttle().rateLimit()));
+                        }
+                        if (plan.throttle().burstLimit() != null) {
+                            limits.put("burstLimit", String.valueOf(plan.throttle().burstLimit()));
+                        }
+                    }
+                    if (plan.quota() != null) {
+                        if (plan.quota().limit() != null) {
+                            limits.put("quotaLimit", String.valueOf(plan.quota().limit()));
+                        }
+                        if (plan.quota().period() != null) {
+                            limits.put("quotaPeriod", plan.quota().period().toString());
+                        }
+                    }
+                    remotePlans.add(new RemotePlan(plan.id(), plan.name(),
+                            plan.description() != null ? plan.description() : "", limits));
+                }
+                position = response.position();
+            } while (position != null);
+        } catch (Exception e) {
+            throw new APIManagementException("Failed to list AWS Usage Plans: " + e.getMessage(), e);
+        }
+        return remotePlans;
     }
 
     private Map<String, String> buildTags(FederatedApiKeyContext context, String awsApiId) {

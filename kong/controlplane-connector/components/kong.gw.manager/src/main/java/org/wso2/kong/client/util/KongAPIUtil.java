@@ -21,9 +21,11 @@ package org.wso2.kong.client.util;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
 import org.wso2.carbon.apimgt.api.model.CORSConfiguration;
+import org.wso2.kong.client.KongConstants;
 import org.wso2.kong.client.model.KongPlugin;
 import org.wso2.kong.client.model.KongRoute;
 import org.wso2.kong.client.model.KongService;
@@ -49,6 +51,73 @@ public class KongAPIUtil {
 
     public static final Set<String> WSO2_ALLOWED_METHODS =
             new LinkedHashSet<>(Arrays.asList("GET", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"));
+
+    /**
+     * Resolve API key header from Kong key-auth plugin config.
+     */
+    public static String resolveApiKeyHeader(KongPlugin plugin) {
+        if (plugin == null || plugin.getConfig() == null) {
+            return null;
+        }
+        List<String> keyNames = getStringList(plugin.getConfig(), "key_names");
+        if (keyNames.isEmpty()) {
+            return KongConstants.DEFAULT_KEY_AUTH_HEADER;
+        }
+        for (String keyName : keyNames) {
+            if (keyName != null && !keyName.trim().isEmpty()) {
+                return keyName.trim();
+            }
+        }
+        return KongConstants.DEFAULT_KEY_AUTH_HEADER;
+    }
+
+    /**
+     * Adds API-key security scheme and global requirement to OAS (JSON only).
+     */
+    public static String applyApiKeySecurityToOas(String apiDefinition, String headerName) {
+        if (apiDefinition == null || apiDefinition.trim().isEmpty()) {
+            return apiDefinition;
+        }
+        String effectiveHeader = (headerName == null || headerName.trim().isEmpty())
+                ? KongConstants.DEFAULT_KEY_AUTH_HEADER : headerName.trim();
+        try {
+            JsonObject root = JsonParser.parseString(apiDefinition).getAsJsonObject();
+            JsonObject components = (root.has("components") && root.get("components").isJsonObject())
+                    ? root.getAsJsonObject("components") : new JsonObject();
+            JsonObject securitySchemes = (components.has("securitySchemes")
+                    && components.get("securitySchemes").isJsonObject())
+                    ? components.getAsJsonObject("securitySchemes") : new JsonObject();
+
+            JsonObject apiKeyScheme = new JsonObject();
+            apiKeyScheme.addProperty("type", "apiKey");
+            apiKeyScheme.addProperty("in", "header");
+            apiKeyScheme.addProperty("name", effectiveHeader);
+            securitySchemes.add(KongConstants.KONG_API_KEY_SECURITY_SCHEME_NAME, apiKeyScheme);
+            components.add("securitySchemes", securitySchemes);
+            root.add("components", components);
+
+            JsonArray security = (root.has("security") && root.get("security").isJsonArray())
+                    ? root.getAsJsonArray("security") : new JsonArray();
+            boolean hasScheme = false;
+            for (JsonElement entry : security) {
+                if (entry != null && entry.isJsonObject()
+                        && entry.getAsJsonObject().has(KongConstants.KONG_API_KEY_SECURITY_SCHEME_NAME)) {
+                    hasScheme = true;
+                    break;
+                }
+            }
+            if (!hasScheme) {
+                JsonObject requirement = new JsonObject();
+                requirement.add(KongConstants.KONG_API_KEY_SECURITY_SCHEME_NAME, new JsonArray());
+                security.add(requirement);
+            }
+            root.add("security", security);
+            return root.toString();
+        } catch (Exception ignored) {
+            // Keep original definition for non-JSON OAS payloads.
+            return apiDefinition;
+        }
+    }
 
     /**
      * Transform a Kong CORS plugin to WSO2 CORSConfiguration.

@@ -168,7 +168,23 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
                 .get(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH).getAsLong();
         long newRevisionCreatedTime = newArtifact
                 .get(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH).getAsLong();
-        return existingRevisionCreatedTime != newRevisionCreatedTime;
+        if (existingRevisionCreatedTime != newRevisionCreatedTime) {
+            return true;
+        }
+
+        boolean existingApiKeyEnabled = readBoolean(existingArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED);
+        boolean newApiKeyEnabled = readBoolean(newArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED);
+        if (existingApiKeyEnabled != newApiKeyEnabled) {
+            return true;
+        }
+
+        String existingApiKeyHeader = readString(existingArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER);
+        String newApiKeyHeader = readString(newArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER);
+        return !StringUtils.equals(existingApiKeyHeader, newApiKeyHeader);
     }
 
     private String resolveApiKeyHeader(ApiContract apiContract) {
@@ -179,5 +195,16 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
             }
         }
         return AzureConstants.AZURE_DEFAULT_SUBSCRIPTION_KEY_HEADER;
+    }
+
+    private boolean readBoolean(JsonObject object, String key) {
+        return object != null && object.has(key) && !object.get(key).isJsonNull() && object.get(key).getAsBoolean();
+    }
+
+    private String readString(JsonObject object, String key) {
+        if (object == null || !object.has(key) || object.get(key).isJsonNull()) {
+            return null;
+        }
+        return object.get(key).getAsString();
     }
 }
