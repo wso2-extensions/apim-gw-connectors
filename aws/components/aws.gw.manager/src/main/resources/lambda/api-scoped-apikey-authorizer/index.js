@@ -21,26 +21,26 @@ exports.handler = async (event) => {
     try {
         const methodArn = event && event.methodArn;
         if (!methodArn) {
-            return buildDenyPolicy('anonymous', '*', { reason: 'MISSING_METHOD_ARN' });
+            return unauthorized('MISSING_METHOD_ARN');
         }
 
         const parsedArn = parseMethodArn(methodArn);
         if (!parsedArn) {
-            return buildDenyPolicy('anonymous', methodArn, { reason: 'INVALID_METHOD_ARN' });
+            return unauthorized('INVALID_METHOD_ARN');
         }
 
         const apiKeyValue = extractApiKeyValue(event);
         if (!apiKeyValue) {
-            return buildDenyPolicy('anonymous', methodArn, { reason: 'MISSING_API_KEY' });
+            return unauthorized('MISSING_API_KEY');
         }
 
         const keyMetadata = await findApiKeyByValue(apiKeyValue, parsedArn.region);
         if (!keyMetadata) {
-            return buildDenyPolicy('unknown', methodArn, { reason: 'INVALID_API_KEY' });
+            return unauthorized('INVALID_API_KEY');
         }
 
         if (keyMetadata.enabled === false) {
-            return buildDenyPolicy(keyMetadata.id, methodArn, { reason: 'DISABLED_API_KEY' });
+            return unauthorized('DISABLED_API_KEY');
         }
 
         const tags = await getApiKeyTags(keyMetadata.id, parsedArn.region);
@@ -60,6 +60,9 @@ exports.handler = async (event) => {
             targetApiId: parsedArn.apiId,
         });
     } catch (error) {
+        if (isUnauthorizedError(error)) {
+            throw error;
+        }
         log('error', 'Authorizer execution failed', { message: error && error.message });
         return buildDenyPolicy('error', (event && event.methodArn) || '*', { reason: 'INTERNAL_ERROR' });
     }
@@ -211,6 +214,23 @@ function buildAllowPolicy(principalId, methodArn, context) {
 
 function buildDenyPolicy(principalId, methodArn, context) {
     return buildPolicy(principalId || 'denied', 'Deny', methodArn, context);
+}
+
+function unauthorized(reason) {
+    const error = new Error('Unauthorized');
+    error.code = 'UNAUTHORIZED';
+    error.reason = reason;
+    return Promise.reject(error);
+}
+
+function isUnauthorizedError(error) {
+    if (!error) {
+        return false;
+    }
+    if (error.code === 'UNAUTHORIZED') {
+        return true;
+    }
+    return error.message === 'Unauthorized';
 }
 
 function buildPolicy(principalId, effect, resource, context) {
