@@ -8,7 +8,10 @@
       "localScopes": [],
       "policies": ["policies"],
       "monetization": [],
-      "subscriptions": [],
+      "subscriptions": {
+        "supported": false,
+        "subscriptionless": true
+      },
       "apiKeys": {
         "supported": true,
         "federated": true,

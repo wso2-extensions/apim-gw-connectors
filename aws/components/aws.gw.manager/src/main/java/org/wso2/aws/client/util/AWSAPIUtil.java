@@ -75,8 +75,10 @@ import software.amazon.awssdk.services.apigateway.model.UpdateMethodRequest;
 import software.amazon.awssdk.services.apigateway.model.UpdateRestApiRequest;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -468,6 +470,7 @@ public class AWSAPIUtil {
         api.setGatewayVendor("external");
         api.setEnableSubscriberVerification(false);
         api.setGatewayType(environment.getGatewayType());
+        api.setAvailableTiers(new HashSet<>(Collections.singleton(new Tier("Unlimited"))));
         return api;
     }
 
@@ -503,24 +506,51 @@ public class AWSAPIUtil {
                 .restApiId(restApiId)
                 .build());
 
-        if (resources.hasItems() && resources.items().get(0).resourceMethods() != null
-                && !resources.items().get(0).resourceMethods().isEmpty()) {
-            String httpMethod = resources.items().get(0).resourceMethods()
-                    .keySet()
-                    .iterator()
-                    .next()
-                    .toString();
-            GetIntegrationRequest request = GetIntegrationRequest.builder()
-                    .restApiId(restApiId)
-                    .resourceId(resources.items().get(0).id())
-                    .httpMethod(httpMethod)
-                    .build();
-
-            GetIntegrationResponse response = client.getIntegration(request);
-            return response.uri();
-        } else {
+        if (resources == null || !resources.hasItems()) {
             return null;
         }
+        String selectedUri = null;
+        String selectedKey = null;
+
+        for (Resource resource : resources.items()) {
+            Map<String, Method> resourceMethods = resource.resourceMethods();
+            if (resourceMethods == null || resourceMethods.isEmpty()) {
+                continue;
+            }
+            String resourcePath = resource.path() != null ? resource.path() : "";
+            for (String httpMethod : resourceMethods.keySet()) {
+                if ("OPTIONS".equalsIgnoreCase(httpMethod)) {
+                    continue;
+                }
+                try {
+                    GetIntegrationResponse response = client.getIntegration(GetIntegrationRequest.builder()
+                            .restApiId(restApiId)
+                            .resourceId(resource.id())
+                            .httpMethod(httpMethod)
+                            .build());
+                    String integrationUri = response.uri();
+                    if (response.type() == IntegrationType.MOCK || !isValidEndpointUrl(integrationUri)) {
+                        continue;
+                    }
+                    String candidateKey = resourcePath + "#" + httpMethod.toUpperCase();
+                    if (selectedKey == null || candidateKey.compareTo(selectedKey) < 0) {
+                        selectedKey = candidateKey;
+                        selectedUri = integrationUri;
+                    }
+                } catch (Exception e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error getting integration for resource " + resource.id() + " and method "
+                                + httpMethod + ": " + e.getMessage());
+                    }
+                }
+            }
+        }
+        return selectedUri;
+    }
+
+    private static boolean isValidEndpointUrl(String integrationUri) {
+        return integrationUri != null && !integrationUri.isEmpty()
+                && (integrationUri.startsWith("http://") || integrationUri.startsWith("https://"));
     }
 
     public static ApiKeySecurityContext resolveApiKeySecurityContext(String restApiId, ApiGatewayClient client) {
