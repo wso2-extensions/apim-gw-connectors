@@ -36,17 +36,12 @@ import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient;
-import software.amazon.awssdk.services.apigateway.model.CreateAuthorizerRequest;
-import software.amazon.awssdk.services.apigateway.model.CreateAuthorizerResponse;
 import software.amazon.awssdk.services.apigateway.model.CreateDeploymentRequest;
 import software.amazon.awssdk.services.apigateway.model.CreateDeploymentResponse;
-import software.amazon.awssdk.services.apigateway.model.DeleteAuthorizerRequest;
 import software.amazon.awssdk.services.apigateway.model.DeleteDeploymentRequest;
 import software.amazon.awssdk.services.apigateway.model.DeleteRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.DeleteStageRequest;
 import software.amazon.awssdk.services.apigateway.model.Deployment;
-import software.amazon.awssdk.services.apigateway.model.GetAuthorizersRequest;
-import software.amazon.awssdk.services.apigateway.model.GetAuthorizersResponse;
 import software.amazon.awssdk.services.apigateway.model.GetDeploymentsRequest;
 import software.amazon.awssdk.services.apigateway.model.GetDeploymentsResponse;
 import software.amazon.awssdk.services.apigateway.model.GetExportRequest;
@@ -86,16 +81,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
-import static org.wso2.aws.client.AWSConstants.AWS_APIKEY_AUTHORIZER_POLICY_NAME;
 import static org.wso2.aws.client.AWSConstants.DEFAULT_VERSION;
 import static org.wso2.aws.client.AWSConstants.JSON_PAYLOAD_TYPE;
 import static org.wso2.aws.client.AWSConstants.OPEN_API_VERSION;
-import static org.wso2.aws.client.AWSConstants.OPERATION_POLICY_API;
-import static org.wso2.aws.client.AWSConstants.OPERATION_POLICY_ARN_PARAMETER;
-import static org.wso2.aws.client.AWSConstants.OPERATION_POLICY_ROLE_PARAMETER;
 import static org.wso2.aws.client.AWSConstants.PRODUCTION_ENDPOINTS;
 import static org.wso2.aws.client.AWSConstants.SANDBOX_ENDPOINTS;
 import static org.wso2.aws.client.AWSConstants.URL_PROP;
@@ -202,47 +192,41 @@ public class AWSAPIUtil {
                                         .build();
                         apiGatewayClient.putIntegrationResponse(putIntegrationResponseRequest);
 
-                // Check and process API Key Authorizer policy
-                String authorizerId = processApiKeyAuthorizerPolicy(api, apiId, region, apiGatewayClient);
-                if (authorizerId != null && !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
-                    // Attach authorizer to method
-                    attachAuthorizerToMethod(apiId, resource.id(), entry.getKey().toString(), authorizerId,
-                            apiGatewayClient);
-                } else if (requiresNativeApiKey(api) &&
-                        !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
-                    // Fallback to native AWS API key if no custom authorizer is configured
-                    List<PatchOperation> patchOperations = new ArrayList<>();
-                    patchOperations.add(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
-                            .value("true").build());
-                    UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder().restApiId(apiId)
-                            .resourceId(resource.id()).httpMethod(entry.getKey().toString())
-                            .patchOperations(patchOperations).build();
-                    apiGatewayClient.updateMethod(updateMethodRequest);
+                        if (requiresNativeApiKey(api) && !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
+                            List<PatchOperation> patchOperations = new ArrayList<>();
+                            // Authorizer wiring is managed outside the connector. The connector only enables
+                            // native AWS API key enforcement for API-key-secured APIs.
+                            patchOperations.add(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
+                                    .value("true").build());
+                            UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder().restApiId(apiId)
+                                    .resourceId(resource.id()).httpMethod(entry.getKey().toString())
+                                    .patchOperations(patchOperations).build();
+                            apiGatewayClient.updateMethod(updateMethodRequest);
+                        }
+
+                        //configure CORS Headers at request Method level
+                        GatewayUtil.configureCORSHeadersAtMethodLevel(apiId, resource, entry.getKey().toString(),
+                                apiGatewayClient);
+                    }
                 }
-
-                //configure CORS Headers at request Method level
-                GatewayUtil.configureCORSHeadersAtMethodLevel(apiId, resource, entry.getKey().toString(),
-                        apiGatewayClient);
             }
+
+            CreateDeploymentRequest createDeploymentRequest = CreateDeploymentRequest.builder().restApiId(apiId)
+                    .stageName(stage).build();
+            apiGatewayClient.createDeployment(createDeploymentRequest);
+        } catch (Exception e) {
+            try {
+                GatewayUtil.rollbackDeployment(apiGatewayClient, apiId);
+            } catch (APIManagementException ex) {
+                throw new APIManagementException("Error occurred while rolling back deployment: " + ex.getMessage());
+            }
+            throw new APIManagementException("Error occurred while importing API: " + e.getMessage());
         }
+
+        GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(apiId).build();
+
+        return apiGatewayClient.getRestApi(getRestApiRequest).toString();
     }
-
-    CreateDeploymentRequest createDeploymentRequest = CreateDeploymentRequest.builder().restApiId(apiId)
-            .stageName(stage).build();
-    apiGatewayClient.createDeployment(createDeploymentRequest);
-} catch (Exception e) {
-    try {
-        GatewayUtil.rollbackDeployment(apiGatewayClient, apiId);
-    } catch (APIManagementException ex) {
-        throw new APIManagementException("Error occurred while rolling back deployment: " + ex.getMessage());
-    }
-    throw new APIManagementException("Error occurred while importing API: " + e.getMessage());
-}
-
-GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(apiId).build();
-
-return apiGatewayClient.getRestApi(getRestApiRequest).toString();
-}
 
     public static String reimportRestAPI(String referenceArtifact, API api, ApiGatewayClient apiGatewayClient,
                                          String region, String stage) throws APIManagementException {
@@ -337,53 +321,47 @@ return apiGatewayClient.getRestApi(getRestApiRequest).toString();
                                         .build();
                         apiGatewayClient.putIntegrationResponse(putIntegrationResponseRequest);
 
-                // Check and process API Key Authorizer policy
-                String authorizerId = processApiKeyAuthorizerPolicy(api, awsApiId, region, apiGatewayClient);
-                if (authorizerId != null && !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
-                    // Attach authorizer to method
-                    attachAuthorizerToMethod(awsApiId, resource.id(), entry.getKey().toString(), authorizerId,
-                            apiGatewayClient);
-                } else if (requiresNativeApiKey(api) &&
-                        !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
-                    // Fallback to native AWS API key if no custom authorizer is configured
-                    List<PatchOperation> patchOperations = new ArrayList<>();
-                    patchOperations.add(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
-                            .value("true").build());
-                    UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder().restApiId(awsApiId)
-                            .resourceId(resource.id()).httpMethod(entry.getKey().toString())
-                            .patchOperations(patchOperations).build();
-                    apiGatewayClient.updateMethod(updateMethodRequest);
+                        if (requiresNativeApiKey(api) && !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
+                            List<PatchOperation> patchOperations = new ArrayList<>();
+                            // Authorizer wiring is managed outside the connector. The connector only enables
+                            // native AWS API key enforcement for API-key-secured APIs.
+                            patchOperations.add(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
+                                    .value("true").build());
+                            UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder().restApiId(awsApiId)
+                                    .resourceId(resource.id()).httpMethod(entry.getKey().toString())
+                                    .patchOperations(patchOperations).build();
+                            apiGatewayClient.updateMethod(updateMethodRequest);
+                        }
+
+                        //configure CORS Headers at request Method level
+                        GatewayUtil.configureCORSHeadersAtMethodLevel(awsApiId, resource, entry.getKey().toString(),
+                                apiGatewayClient);
+                    }
                 }
-
-                //configure CORS Headers at request Method level
-                GatewayUtil.configureCORSHeadersAtMethodLevel(awsApiId, resource, entry.getKey().toString(),
-                        apiGatewayClient);
             }
-        }
-    }
 
-    // re-deploy API
-    CreateDeploymentRequest createDeploymentRequest = CreateDeploymentRequest.builder().restApiId(awsApiId)
-            .stageName(stage).build();
-    CreateDeploymentResponse createDeploymentResponse =
-            apiGatewayClient.createDeployment(createDeploymentRequest);
-    String deploymentId = createDeploymentResponse.id();
+            // re-deploy API
+            CreateDeploymentRequest createDeploymentRequest = CreateDeploymentRequest.builder().restApiId(awsApiId)
+                    .stageName(stage).build();
+            CreateDeploymentResponse createDeploymentResponse =
+                    apiGatewayClient.createDeployment(createDeploymentRequest);
+            String deploymentId = createDeploymentResponse.id();
 
-    GetDeploymentsRequest getDeploymentsRequest = GetDeploymentsRequest.builder().restApiId(awsApiId).build();
-    GetDeploymentsResponse getDeploymentsResponse = apiGatewayClient.getDeployments(getDeploymentsRequest);
-    List<Deployment> deployments = getDeploymentsResponse.items();
-    for (Deployment deployment : deployments) {
-        if (!deployment.id().equals(deploymentId)) {
-            DeleteDeploymentRequest deleteDeploymentRequest = DeleteDeploymentRequest.builder()
-                    .deploymentId(deployment.id())
-                    .restApiId(awsApiId)
-                    .build();
-            apiGatewayClient.deleteDeployment(deleteDeploymentRequest);
-        }
-    }
+            GetDeploymentsRequest getDeploymentsRequest = GetDeploymentsRequest.builder().restApiId(awsApiId).build();
+            GetDeploymentsResponse getDeploymentsResponse = apiGatewayClient.getDeployments(getDeploymentsRequest);
+            List<Deployment> deployments = getDeploymentsResponse.items();
+            for (Deployment deployment : deployments) {
+                if (!deployment.id().equals(deploymentId)) {
+                    DeleteDeploymentRequest deleteDeploymentRequest = DeleteDeploymentRequest.builder()
+                            .deploymentId(deployment.id())
+                            .restApiId(awsApiId)
+                            .build();
+                    apiGatewayClient.deleteDeployment(deleteDeploymentRequest);
+                }
+            }
 
-    GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(awsApiId).build();
-    return apiGatewayClient.getRestApi(getRestApiRequest).toString();
+            GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(awsApiId).build();
+            return apiGatewayClient.getRestApi(getRestApiRequest).toString();
         } catch (Exception e) {
             throw new APIManagementException("Error occurred while re-importing API: " + e.getMessage());
         }
@@ -666,245 +644,6 @@ return apiGatewayClient.getRestApi(getRestApiRequest).toString();
 
         public String getHeaderName() {
             return headerName;
-        }
-    }
-
-    /**
-     * Processes API level operation policies and creates/attaches Lambda authorizer if awsApiKeyAuthorizer
-     * policy is present.
-     *
-     * @param api The API object containing policies
-     * @param restApiId The AWS REST API ID
-     * @param region The AWS region
-     * @param apiGatewayClient The ApiGatewayClient instance
-     * @return The created authorizer ID, or null if no authorizer was created
-     * @throws APIManagementException If an error occurs while processing policies or creating authorizer
-     */
-    public static String processApiKeyAuthorizerPolicy(API api, String restApiId, String region,
-                                                       ApiGatewayClient apiGatewayClient)
-            throws APIManagementException {
-        if (api == null || restApiId == null) {
-            return null;
-        }
-
-        // Check for API-level policies
-        List<OperationPolicy> apiPolicies = api.getApiPolicies();
-        if (apiPolicies != null) {
-            for (OperationPolicy policy : apiPolicies) {
-                if (isApiKeyAuthorizerPolicy(policy)) {
-                    String authorizerId = createAndAttachApiKeyAuthorizer(policy, restApiId, region, apiGatewayClient);
-                    if (authorizerId != null && log.isDebugEnabled()) {
-                        log.debug("Created and attached API Key Authorizer for API: " + restApiId);
-                    }
-                    return authorizerId;
-                }
-            }
-        }
-
-        // Check for operation-level policies
-        Set<URITemplate> uriTemplates = api.getUriTemplates();
-        if (uriTemplates != null) {
-            for (URITemplate uriTemplate : uriTemplates) {
-                List<OperationPolicy> operationPolicies = uriTemplate.getOperationPolicies();
-                if (operationPolicies != null) {
-                    for (OperationPolicy policy : operationPolicies) {
-                        if (isApiKeyAuthorizerPolicy(policy)) {
-                            String authorizerId = createAndAttachApiKeyAuthorizer(policy, restApiId, region,
-                                    apiGatewayClient);
-                            if (authorizerId != null && log.isDebugEnabled()) {
-                                log.debug("Created and attached API Key Authorizer for API: " + restApiId);
-                            }
-                            return authorizerId;
-                        }
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Checks if the given operation policy is an API Key Authorizer policy.
-     *
-     * @param policy The operation policy to check
-     * @return true if the policy is an API Key Authorizer policy, false otherwise
-     */
-    private static boolean isApiKeyAuthorizerPolicy(OperationPolicy policy) {
-        if (policy == null || policy.getPolicyName() == null) {
-            return false;
-        }
-        return AWS_APIKEY_AUTHORIZER_POLICY_NAME.equals(policy.getPolicyName()) ||
-                (policy.getPolicyName().startsWith(AWS_APIKEY_AUTHORIZER_POLICY_NAME) &&
-                        policy.getPolicyName().contains(":"));
-    }
-
-    /**
-     * Creates a Lambda authorizer for API key validation and attaches it to the API.
-     *
-     * @param policy The operation policy containing Lambda ARN and role ARN
-     * @param restApiId The AWS REST API ID
-     * @param region The AWS region
-     * @param apiGatewayClient The ApiGatewayClient instance
-     * @return The created authorizer ID, or null if creation failed
-     * @throws APIManagementException If an error occurs while creating the authorizer
-     */
-    private static String createAndAttachApiKeyAuthorizer(OperationPolicy policy, String restApiId,
-                                                          String region, ApiGatewayClient apiGatewayClient)
-            throws APIManagementException {
-        Map<String, Object> parameters = policy.getParameters();
-        if (parameters == null) {
-            throw new APIManagementException("API Key Authorizer policy parameters are missing");
-        }
-
-        String lambdaArn = (String) parameters.get(OPERATION_POLICY_ARN_PARAMETER);
-        String invokeRoleArn = (String) parameters.get(OPERATION_POLICY_ROLE_PARAMETER);
-
-        if (lambdaArn == null || invokeRoleArn == null) {
-            throw new APIManagementException("Lambda ARN or Invoke Role ARN is missing in " +
-                    "API Key Authorizer policy");
-        }
-
-        // Delete existing authorizers with the same name to avoid conflicts
-        deleteExistingAuthorizers(restApiId, apiGatewayClient);
-
-        // Create the Lambda authorizer
-        CreateAuthorizerRequest createAuthorizerRequest = CreateAuthorizerRequest.builder()
-                .restApiId(restApiId)
-                .name("wso2-api-key-authorizer")
-                .type(software.amazon.awssdk.services.apigateway.model.AuthorizerType.REQUEST)
-                .identitySource("method.request.header." + AWS_API_KEY_HEADER)
-                .authorizerUri("arn:aws:apigateway:" + region + ":lambda:path/2015-03-31/functions/" + lambdaArn +
-                        "/invocations")
-                .authorizerCredentials(invokeRoleArn)
-                .authorizerResultTtlInSeconds(0)
-                .build();
-
-        CreateAuthorizerResponse response = apiGatewayClient.createAuthorizer(createAuthorizerRequest);
-        String authorizerId = response.id();
-
-        if (log.isDebugEnabled()) {
-            log.debug("Created Lambda authorizer for API key validation: " + authorizerId);
-        }
-
-        return authorizerId;
-    }
-
-    /**
-     * Attaches the authorizer to a specific method.
-     *
-     * @param restApiId The AWS REST API ID
-     * @param resourceId The resource ID
-     * @param httpMethod The HTTP method
-     * @param authorizerId The authorizer ID to attach
-     * @param apiGatewayClient The ApiGatewayClient instance
-     * @throws APIManagementException If an error occurs while attaching the authorizer
-     */
-    public static void attachAuthorizerToMethod(String restApiId, String resourceId, String httpMethod,
-                                                 String authorizerId, ApiGatewayClient apiGatewayClient)
-            throws APIManagementException {
-        if (restApiId == null || resourceId == null || httpMethod == null || authorizerId == null) {
-            return;
-        }
-
-        // Attach authorizer to the method
-        List<PatchOperation> patchOperations = new ArrayList<>();
-        patchOperations.add(PatchOperation.builder()
-                .op(Op.REPLACE)
-                .path("/authorizationType")
-                .value("CUSTOM")
-                .build());
-        patchOperations.add(PatchOperation.builder()
-                .op(Op.REPLACE)
-                .path("/authorizerId")
-                .value(authorizerId)
-                .build());
-
-        UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder()
-                .restApiId(restApiId)
-                .resourceId(resourceId)
-                .httpMethod(httpMethod)
-                .patchOperations(patchOperations)
-                .build();
-
-        apiGatewayClient.updateMethod(updateMethodRequest);
-
-        if (log.isDebugEnabled()) {
-            log.debug("Attached authorizer " + authorizerId + " to method " + httpMethod +
-                    " on resource " + resourceId);
-        }
-    }
-
-    /**
-     * Attaches the authorizer to all methods of the API except OPTIONS.
-     *
-     * @param restApiId The AWS REST API ID
-     * @param authorizerId The authorizer ID to attach
-     * @param apiGatewayClient The ApiGatewayClient instance
-     * @throws APIManagementException If an error occurs while attaching the authorizer
-     */
-    public static void attachAuthorizerToMethods(String restApiId, String authorizerId,
-                                                  ApiGatewayClient apiGatewayClient)
-            throws APIManagementException {
-        if (restApiId == null || authorizerId == null) {
-            return;
-        }
-
-        GetResourcesResponse resources = apiGatewayClient.getResources(
-                GetResourcesRequest.builder().restApiId(restApiId).build());
-
-        if (resources == null || !resources.hasItems()) {
-            return;
-        }
-
-        for (Resource resource : resources.items()) {
-            Map<String, Method> resourceMethods = resource.resourceMethods();
-            if (resourceMethods == null || resourceMethods.isEmpty()) {
-                continue;
-            }
-
-            for (Map.Entry<String, Method> entry : resourceMethods.entrySet()) {
-                String httpMethod = entry.getKey();
-                if ("OPTIONS".equalsIgnoreCase(httpMethod)) {
-                    continue;
-                }
-
-                // Attach authorizer to the method
-                attachAuthorizerToMethod(restApiId, resource.id(), httpMethod, authorizerId, apiGatewayClient);
-            }
-        }
-    }
-
-    /**
-     * Deletes existing authorizers from the API to avoid conflicts.
-     *
-     * @param restApiId The AWS REST API ID
-     * @param apiGatewayClient The ApiGatewayClient instance
-     */
-    private static void deleteExistingAuthorizers(String restApiId, ApiGatewayClient apiGatewayClient) {
-        try {
-            GetAuthorizersResponse authorizersResponse = apiGatewayClient.getAuthorizers(
-                    GetAuthorizersRequest.builder().restApiId(restApiId).build());
-
-            if (authorizersResponse != null && authorizersResponse.items() != null) {
-                for (software.amazon.awssdk.services.apigateway.model.Authorizer authorizer :
-                        authorizersResponse.items()) {
-                    // Delete authorizers with our naming pattern
-                    if (authorizer.name() != null && authorizer.name().startsWith("wso2-")) {
-                        apiGatewayClient.deleteAuthorizer(DeleteAuthorizerRequest.builder()
-                                .restApiId(restApiId)
-                                .authorizerId(authorizer.id())
-                                .build());
-                        if (log.isDebugEnabled()) {
-                            log.debug("Deleted existing authorizer: " + authorizer.id());
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            if (log.isDebugEnabled()) {
-                log.debug("Error deleting existing authorizers: " + e.getMessage());
-            }
         }
     }
 }

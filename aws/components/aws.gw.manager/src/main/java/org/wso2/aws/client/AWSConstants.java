@@ -34,7 +34,6 @@ public class AWSConstants {
 
     // Authorizer related constants
     public static final String AWS_OPERATION_POLICY_NAME = "awsOAuth2";
-    public static final String AWS_APIKEY_AUTHORIZER_POLICY_NAME = "awsApiKeyAuthorizer";
     public static final String OPERATION_POLICY_ARN_PARAMETER = "lambdaARN";
     public static final String OPERATION_POLICY_ROLE_PARAMETER = "invokeRoleArn";
     public static final String OPERATION_POLICY_API = "API";

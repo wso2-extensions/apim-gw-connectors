@@ -29,7 +29,6 @@ import org.wso2.carbon.apimgt.api.FederatedAPIDiscovery;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.DiscoveredAPI;
 import org.wso2.carbon.apimgt.api.model.Environment;
-import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.SdkHttpClient;
@@ -39,9 +38,7 @@ import software.amazon.awssdk.services.apigateway.ApiGatewayClient;
 import software.amazon.awssdk.services.apigateway.model.RestApi;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import static org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants.DEPLOYMENT_NAME;
@@ -123,77 +120,12 @@ public class AWSFederatedAPIDiscovery implements FederatedAPIDiscovery {
             if (apiKeySecurityContext.isEnabled()) {
                 api.setApiSecurity("api_key");
                 api.setApiKeyHeader(apiKeySecurityContext.getHeaderName());
-                // Add API Key Authorizer as operation policy
-                addApiKeyAuthorizerPolicy(api);
             }
             DiscoveredAPI discoveredAPI = new DiscoveredAPI(api,
                     AWSAPIUtil.createReferenceArtifact(restApi, apiDefinition, apiKeySecurityContext));
             retrievedAPIs.add(discoveredAPI);
         }
         return retrievedAPIs;
-    }
-
-    /**
-     * Adds the awsApiKeyAuthorizer operation policy to the API.
-     * This policy configures the Lambda authorizer for API key validation.
-     *
-     * @param api The API to add the policy to
-     */
-    private void addApiKeyAuthorizerPolicy(API api) {
-        OperationPolicy apiKeyAuthorizerPolicy = new OperationPolicy();
-        apiKeyAuthorizerPolicy.setPolicyName(AWSConstants.AWS_APIKEY_AUTHORIZER_POLICY_NAME);
-        apiKeyAuthorizerPolicy.setPolicyVersion("v1");
-        apiKeyAuthorizerPolicy.setPolicyType("API");
-        apiKeyAuthorizerPolicy.setDirection("request");
-        apiKeyAuthorizerPolicy.setOrder(1);
-
-        // Create policy parameters
-        Map<String, Object> parameters = new HashMap<>();
-        // Get Lambda ARN from environment configuration
-        String lambdaArn = getLambdaArnFromEnvironment();
-        String invokeRoleArn = getInvokeRoleArnFromEnvironment();
-
-        if (lambdaArn != null && invokeRoleArn != null) {
-            parameters.put(AWSConstants.OPERATION_POLICY_ARN_PARAMETER, lambdaArn);
-            parameters.put(AWSConstants.OPERATION_POLICY_ROLE_PARAMETER, invokeRoleArn);
-            apiKeyAuthorizerPolicy.setParameters(parameters);
-
-            // Add policy to API
-            List<OperationPolicy> apiPolicies = new ArrayList<>();
-            apiPolicies.add(apiKeyAuthorizerPolicy);
-            api.setApiPolicies(apiPolicies);
-
-            if (log.isDebugEnabled()) {
-                log.debug("Added awsApiKeyAuthorizer operation policy to API: " + api.getId().getApiName());
-            }
-        } else {
-            log.warn("Lambda ARN or Invoke Role ARN not configured for API Key Authorizer. " +
-                    "Please configure them in the environment settings.");
-        }
-    }
-
-    /**
-     * Retrieves the Lambda ARN for API Key Authorizer from environment configuration.
-     *
-     * @return The Lambda ARN or null if not configured
-     */
-    private String getLambdaArnFromEnvironment() {
-        if (environment != null && environment.getAdditionalProperties() != null) {
-            return environment.getAdditionalProperties().get("apiKeyAuthorizerLambdaArn");
-        }
-        return null;
-    }
-
-    /**
-     * Retrieves the Invoke Role ARN for API Key Authorizer from environment configuration.
-     *
-     * @return The Invoke Role ARN or null if not configured
-     */
-    private String getInvokeRoleArnFromEnvironment() {
-        if (environment != null && environment.getAdditionalProperties() != null) {
-            return environment.getAdditionalProperties().get("apiKeyAuthorizerInvokeRoleArn");
-        }
-        return null;
     }
 
     @Override
