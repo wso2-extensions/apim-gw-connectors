@@ -25,10 +25,11 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.aws.client.util.GatewayUtil;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
+import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
-import org.wso2.carbon.apimgt.api.model.RemotePlan;
+import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.SdkHttpClient;
@@ -108,7 +109,7 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public String createApiKey(FederatedApiKeyContext context) throws APIManagementException {
+    public CredentialCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
         if (StringUtils.isBlank(context.getApiKeyValue())) {
             throw new APIManagementException("API key value is required to create AWS API key");
         }
@@ -122,7 +123,11 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
                     .tags(buildTags(context, awsApiId))
                     .build();
             CreateApiKeyResponse response = apiGatewayClient.createApiKey(request);
-            return response.id();
+            
+            return CredentialCreationResult.builder()
+                    .remoteCredentialId(response.id())
+                    .credentialType("AWS_API_KEY")
+                    .build();
         } catch (Exception e) {
             throw new APIManagementException("Error creating API key in AWS", e);
         }
@@ -144,18 +149,18 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public void associateApiKeyWithUsagePlan(FederatedApiKeyContext context, String remoteUsagePlanId)
+    public void applyRateLimitPolicy(FederatedApiKeyContext context, String policyId)
             throws APIManagementException {
         if (StringUtils.isBlank(context.getRemoteApiKeyId())) {
-            throw new APIManagementException("Remote API key ID is required for usage plan association");
+            throw new APIManagementException("Remote API key ID is required for rate limit policy association");
         }
-        if (StringUtils.isBlank(remoteUsagePlanId)) {
-            throw new APIManagementException("Remote usage plan ID is required for association");
+        if (StringUtils.isBlank(policyId)) {
+            throw new APIManagementException("Remote policy ID is required for association");
         }
         try {
-            removeApiKeyAssociations(context);
+            removeRateLimitPolicy(context);
             CreateUsagePlanKeyRequest request = CreateUsagePlanKeyRequest.builder()
-                    .usagePlanId(remoteUsagePlanId)
+                    .usagePlanId(policyId)
                     .keyId(context.getRemoteApiKeyId())
                     .keyType("API_KEY")
                     .build();
@@ -166,7 +171,7 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public void removeApiKeyAssociations(FederatedApiKeyContext context) throws APIManagementException {
+    public void removeRateLimitPolicy(FederatedApiKeyContext context) throws APIManagementException {
         if (StringUtils.isBlank(context.getRemoteApiKeyId())) {
             return;
         }
@@ -192,8 +197,31 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public List<RemotePlan> listRemotePlans(Environment environment) throws APIManagementException {
-        List<RemotePlan> remotePlans = new ArrayList<>();
+    public String resolveRemotePolicyId(String remotePolicyReference) throws APIManagementException {
+        if (StringUtils.isBlank(remotePolicyReference)) {
+            return null;
+        }
+        String value = remotePolicyReference.trim();
+        try {
+            com.google.gson.JsonObject policyJson = com.google.gson.JsonParser.parseString(value).getAsJsonObject();
+            if (policyJson.has("id") && !policyJson.get("id").isJsonNull()) {
+                return policyJson.get("id").getAsString();
+            }
+            if (policyJson.has("planId") && !policyJson.get("planId").isJsonNull()) {
+                return policyJson.get("planId").getAsString();
+            }
+            if (policyJson.has("raw") && !policyJson.get("raw").isJsonNull()) {
+                return policyJson.get("raw").getAsString();
+            }
+        } catch (Exception ignored) {
+            // Fall back to raw text format
+        }
+        return value;
+    }
+
+    @Override
+    public List<ExternalSubscriptionPolicy> listRateLimitPolicies(Environment environment) throws APIManagementException {
+        List<ExternalSubscriptionPolicy> rateLimitPolicies = new ArrayList<>();
         try {
             String position = null;
             do {
@@ -220,7 +248,7 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
                             limits.put("quotaPeriod", plan.quota().period().toString());
                         }
                     }
-                    remotePlans.add(new RemotePlan(plan.id(), plan.name(),
+                    rateLimitPolicies.add(new ExternalSubscriptionPolicy(plan.id(), plan.name(),
                             plan.description() != null ? plan.description() : "", limits));
                 }
                 position = response.position();
@@ -228,7 +256,7 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
         } catch (Exception e) {
             throw new APIManagementException("Failed to list AWS Usage Plans: " + e.getMessage(), e);
         }
-        return remotePlans;
+        return rateLimitPolicies;
     }
 
     private Map<String, String> buildTags(FederatedApiKeyContext context, String awsApiId) {

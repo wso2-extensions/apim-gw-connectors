@@ -35,9 +35,16 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
+import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Azure implementation of federated API key management.
@@ -85,7 +92,7 @@ public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public String createApiKey(FederatedApiKeyContext context) throws APIManagementException {
+    public CredentialCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
         if (context == null || StringUtils.isBlank(context.getApiReferenceArtifact())
                 || StringUtils.isBlank(context.getApiKeyValue())) {
             throw new APIManagementException("API reference artifact and API key value are required");
@@ -105,7 +112,18 @@ public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
 
             SubscriptionContract subscription = manager.subscriptions()
                     .createOrUpdate(resourceGroup, serviceName, subscriptionName, parameters);
-            return subscription.name();
+            
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("subscriptionName", subscription.name());
+            metadata.put("primaryKey", subscription.primaryKey());
+            metadata.put("secondaryKey", subscription.secondaryKey());
+            metadata.put("scope", subscription.scope());
+            
+            return CredentialCreationResult.builder()
+                    .remoteCredentialId(subscription.name())
+                    .credentialType("AZURE_SUBSCRIPTION")
+                    .metadata(metadata)
+                    .build();
         } catch (Exception e) {
             throw new APIManagementException("Error creating API key in Azure", e);
         }
@@ -124,17 +142,17 @@ public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public void associateApiKeyWithUsagePlan(FederatedApiKeyContext context, String remoteUsagePlanId) {
+    public void applyRateLimitPolicy(FederatedApiKeyContext context, String remotePolicyId) {
         if (log.isDebugEnabled()) {
-            log.debug("Skipping usage-plan association for Azure API-bound key. keyUuid="
+            log.debug("Skipping rate-limit policy association for Azure API-bound key. keyUuid="
                     + (context != null ? context.getApiKeyUuid() : null));
         }
     }
 
     @Override
-    public void removeApiKeyAssociations(FederatedApiKeyContext context) {
+    public void removeRateLimitPolicy(FederatedApiKeyContext context) {
         if (log.isDebugEnabled()) {
-            log.debug("Skipping usage-plan dissociation for Azure API-bound key. keyUuid="
+            log.debug("Skipping rate-limit policy dissociation for Azure API-bound key. keyUuid="
                     + (context != null ? context.getApiKeyUuid() : null));
         }
     }
@@ -160,6 +178,36 @@ public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
             log.warn("Error while resolving Azure API key support from GatewayFeatureCatalog", e);
         }
         return false;
+    }
+
+    @Override
+    public String resolveRemotePolicyId(String remotePolicyReference) throws APIManagementException {
+        if (StringUtils.isBlank(remotePolicyReference)) {
+            throw new APIManagementException("Remote policy reference cannot be null or empty");
+        }
+        try {
+            JsonObject refJson = JsonParser.parseString(remotePolicyReference).getAsJsonObject();
+            if (refJson.has("id") && !refJson.get("id").isJsonNull()) {
+                return refJson.get("id").getAsString();
+            }
+            if (refJson.has("planId") && !refJson.get("planId").isJsonNull()) {
+                return refJson.get("planId").getAsString();
+            }
+            if (refJson.has("raw") && !refJson.get("raw").isJsonNull()) {
+                return refJson.get("raw").getAsString();
+            }
+        } catch (Exception e) {
+            log.debug("Failed to parse remote policy reference as JSON, treating as raw value", e);
+        }
+        return remotePolicyReference;
+    }
+
+    @Override
+    public List<ExternalSubscriptionPolicy> listRateLimitPolicies(Environment environment)
+            throws APIManagementException {
+        // Azure API-bound keys don't require separate rate limit policies
+        // Rate limiting is configured at the API/Product level in Azure
+        return new ArrayList<>();
     }
 
     private String extractAzureApiIdFromReferenceArtifact(String referenceArtifact) throws APIManagementException {

@@ -32,10 +32,11 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
+import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
-import org.wso2.carbon.apimgt.api.model.RemotePlan;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
 import org.wso2.kong.client.model.KongAcl;
 import org.wso2.kong.client.model.KongConsumer;
@@ -103,7 +104,7 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public String createApiKey(FederatedApiKeyContext context) throws APIManagementException {
+    public CredentialCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
         if (context == null || StringUtils.isAnyBlank(context.getApiKeyUuid(), context.getApiKeyValue())) {
             throw new APIManagementException("API key UUID and value are required");
         }
@@ -130,7 +131,11 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
                 throw new APIManagementException("Failed to create Kong key-auth credential");
             }
             apiGatewayClient.createAcl(controlPlaneId, consumerId, new KongAcl(buildApiAclGroup(remoteApiId)));
-            return consumerId;
+            
+            return CredentialCreationResult.builder()
+                    .remoteCredentialId(consumerId)
+                    .credentialType("KONG_CONSUMER")
+                    .build();
         } catch (KongGatewayException e) {
             if (e.getStatusCode() == HTTP_CONFLICT) {
                 throw new APIManagementException("Kong consumer already exists for key UUID: "
@@ -161,40 +166,40 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
     }
 
     @Override
-    public void associateApiKeyWithUsagePlan(FederatedApiKeyContext context, String remoteUsagePlanId)
+    public void applyRateLimitPolicy(FederatedApiKeyContext context, String policyId)
             throws APIManagementException {
         if (context == null || StringUtils.isBlank(context.getRemoteApiKeyId())) {
             throw new APIManagementException("Remote API key ID is required for Kong association");
         }
-        if (StringUtils.isBlank(remoteUsagePlanId)) {
+        if (StringUtils.isBlank(policyId)) {
             throw new APIManagementException("Mapped remote consumer group ID is required for Kong association");
         }
 
         try {
             String remoteApiId = resolveRemoteApiId(context.getApiReferenceArtifact());
-            if (!consumerGroupExists(remoteUsagePlanId)) {
-                throw new APIManagementException("Mapped Kong consumer group was not found: " + remoteUsagePlanId);
+            if (!consumerGroupExists(policyId)) {
+                throw new APIManagementException("Mapped Kong consumer group was not found: " + policyId);
             }
 
             removeTierAclGroups(context.getRemoteApiKeyId());
             removeSubscriptionScopedAclGroups(context.getRemoteApiKeyId(), remoteApiId);
             apiGatewayClient.createAcl(controlPlaneId, context.getRemoteApiKeyId(),
-                    new KongAcl(buildTierAclGroup(remoteUsagePlanId)));
+                    new KongAcl(buildTierAclGroup(policyId)));
             apiGatewayClient.createAcl(controlPlaneId, context.getRemoteApiKeyId(),
-                    new KongAcl(buildSubscriptionAclGroup(remoteApiId, remoteUsagePlanId)));
+                    new KongAcl(buildSubscriptionAclGroup(remoteApiId, policyId)));
 
             removeConsumerFromAllGroups(context.getRemoteApiKeyId());
-            apiGatewayClient.addConsumerToGroup(controlPlaneId, remoteUsagePlanId,
+            apiGatewayClient.addConsumerToGroup(controlPlaneId, policyId,
                     new KongConsumerGroupMembership(context.getRemoteApiKeyId()));
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {
-            throw new APIManagementException("Error associating Kong consumer to group: " + remoteUsagePlanId, e);
+            throw new APIManagementException("Error associating Kong consumer to group: " + policyId, e);
         }
     }
 
     @Override
-    public void removeApiKeyAssociations(FederatedApiKeyContext context) throws APIManagementException {
+    public void removeRateLimitPolicy(FederatedApiKeyContext context) throws APIManagementException {
         if (context == null || StringUtils.isBlank(context.getRemoteApiKeyId())) {
             return;
         }
@@ -208,6 +213,54 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
             removeConsumerFromAllGroups(context.getRemoteApiKeyId());
         } catch (Exception e) {
             throw new APIManagementException("Error removing Kong consumer group associations", e);
+        }
+    }
+
+    @Override
+    public String resolveRemotePolicyId(String remotePolicyReference) throws APIManagementException {
+        if (StringUtils.isBlank(remotePolicyReference)) {
+            return null;
+        }
+        String value = remotePolicyReference.trim();
+        try {
+            JsonObject policyJson = JsonParser.parseString(value).getAsJsonObject();
+            if (policyJson.has("id") && !policyJson.get("id").isJsonNull()) {
+                return policyJson.get("id").getAsString();
+            }
+            if (policyJson.has("planId") && !policyJson.get("planId").isJsonNull()) {
+                return policyJson.get("planId").getAsString();
+            }
+            if (policyJson.has("raw") && !policyJson.get("raw").isJsonNull()) {
+                return policyJson.get("raw").getAsString();
+            }
+        } catch (Exception ignored) {
+            // Fall back to raw text format
+        }
+        return value;
+    }
+
+    @Override
+    public List<ExternalSubscriptionPolicy> listRateLimitPolicies(Environment environment)
+            throws APIManagementException {
+        List<ExternalSubscriptionPolicy> rateLimitPolicies = new ArrayList<>();
+        try {
+            PagedResponse<KongConsumerGroup> response = apiGatewayClient.listConsumerGroups(controlPlaneId,
+                    KongConstants.DEFAULT_CONSUMER_GROUP_LIST_LIMIT);
+            if (response == null || response.getData() == null) {
+                return rateLimitPolicies;
+            }
+            for (KongConsumerGroup group : response.getData()) {
+                if (group == null || StringUtils.isBlank(group.getId())) {
+                    continue;
+                }
+                Map<String, String> limits = new HashMap<>();
+                rateLimitPolicies.add(new ExternalSubscriptionPolicy(group.getId(),
+                        StringUtils.defaultIfBlank(group.getName(), group.getId()),
+                        "", limits));
+            }
+            return rateLimitPolicies;
+        } catch (Exception e) {
+            throw new APIManagementException("Failed to list Kong consumer groups: " + e.getMessage(), e);
         }
     }
 
@@ -232,30 +285,6 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
             log.warn("Error while resolving Kong API key support from GatewayFeatureCatalog", e);
         }
         return false;
-    }
-
-    @Override
-    public List<RemotePlan> listRemotePlans(Environment environment) throws APIManagementException {
-        List<RemotePlan> remotePlans = new ArrayList<>();
-        try {
-            PagedResponse<KongConsumerGroup> response = apiGatewayClient.listConsumerGroups(controlPlaneId,
-                    KongConstants.DEFAULT_CONSUMER_GROUP_LIST_LIMIT);
-            if (response == null || response.getData() == null) {
-                return remotePlans;
-            }
-            for (KongConsumerGroup group : response.getData()) {
-                if (group == null || StringUtils.isBlank(group.getId())) {
-                    continue;
-                }
-                Map<String, String> limits = new HashMap<>();
-                remotePlans.add(new RemotePlan(group.getId(),
-                        StringUtils.defaultIfBlank(group.getName(), group.getId()),
-                        "", limits));
-            }
-            return remotePlans;
-        } catch (Exception e) {
-            throw new APIManagementException("Failed to list Kong consumer groups: " + e.getMessage(), e);
-        }
     }
 
     private String resolveRemoteApiId(String apiReferenceArtifact) throws APIManagementException {
