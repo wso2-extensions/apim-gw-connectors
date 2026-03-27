@@ -124,6 +124,11 @@
                 <version>${carbon.apimgt.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.wso2.carbon.apimgt</groupId>
+                <artifactId>org.wso2.carbon.apimgt.spec.parser</artifactId>
+                <version>${carbon.apimgt.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.wso2.orbit.com.azure.resourcemanager</groupId>
                 <artifactId>azure-resourcemanager-apimanagement</artifactId>
                 <version>${org.wso2.orbit.azure.resourcemanager.apimanagement.version}</version>

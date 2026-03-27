@@ -77,6 +77,10 @@
             <artifactId>org.wso2.carbon.apimgt.api</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.spec.parser</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.wso2.orbit.com.azure.resourcemanager</groupId>
             <artifactId>azure-resourcemanager-apimanagement</artifactId>
         </dependency>
