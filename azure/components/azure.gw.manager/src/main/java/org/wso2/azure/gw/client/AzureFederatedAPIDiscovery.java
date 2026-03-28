@@ -31,6 +31,7 @@ import com.azure.identity.ClientSecretCredentialBuilder;
 import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.azure.resourcemanager.apimanagement.models.ApiContract;
 import com.azure.resourcemanager.apimanagement.models.ApiRevisionContract;
+import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.commons.logging.Log;
@@ -122,10 +123,20 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
         List<DiscoveredAPI> retrievedAPIs = new ArrayList<>();
         for (ApiContract api : apis) {
             try {
+                API apiArtifact = null;
                 // Get API
-                String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
-                API apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
+                if (ApiType.WEBSOCKET.equals(api.apiType())){
+                    apiArtifact = AzureAPIUtil.websocketAPIToAPI(api, organization, environment);
+                }
+                else{
+                    String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
+                    apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
+                }
 
+                if (apiArtifact == null) {
+                    log.warn("Skipping unsupported API type: " + api.apiType() + " for API: " + api.name());
+                    continue;
+                }
                 // Get current revision
                 PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions().listByService(resourceGroup,
                         serviceName, api.name(), "isCurrent eq true", /* top */ null, /* skip */ null, Context.NONE);
