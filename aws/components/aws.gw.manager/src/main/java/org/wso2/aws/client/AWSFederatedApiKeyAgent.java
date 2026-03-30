@@ -63,6 +63,9 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
     private static final String TAG_KEY_UUID = "wso2:key-uuid";
     private static final String TAG_AUTHZ_USER = "wso2:authz-user";
     private static final String TAG_ORGANIZATION = "wso2:organization";
+    private static final String TAG_VALIDITY_PERIOD = "wso2:key-validity-period";
+    private static final String TAG_PERMITTED_IP = "wso2:key-permitted-ip";
+    private static final String TAG_PERMITTED_REFERER = "wso2:key-permitted-referer";
 
     private ApiGatewayClient apiGatewayClient;
 
@@ -266,6 +269,11 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
         putTag(tags, TAG_KEY_UUID, context.getApiKeyUuid());
         putTag(tags, TAG_AUTHZ_USER, context.getAuthzUser());
         putTag(tags, TAG_ORGANIZATION, context.getOrganizationId());
+        if (context.getValidityPeriod() != null) {
+            putTag(tags, TAG_VALIDITY_PERIOD, String.valueOf(context.getValidityPeriod()));
+        }
+        putTag(tags, TAG_PERMITTED_IP, context.getPermittedIP());
+        putTag(tags, TAG_PERMITTED_REFERER, context.getPermittedReferer());
         return tags;
     }
 

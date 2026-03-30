@@ -39,6 +39,7 @@ import com.azure.resourcemanager.apimanagement.models.OperationContract;
 import com.azure.resourcemanager.apimanagement.models.PolicyContentFormat;
 import com.azure.resourcemanager.apimanagement.models.PolicyIdName;
 import com.azure.resourcemanager.apimanagement.models.Protocol;
+import com.azure.resourcemanager.apimanagement.models.SubscriptionKeyParameterNamesContract;
 import com.azure.resourcemanager.apimanagement.models.VersioningScheme;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -76,6 +77,7 @@ import java.util.UUID;
  */
 public class AzureAPIUtil {
     private static final Log log = LogFactory.getLog(AzureAPIUtil.class);
+    private static final String DEFAULT_AZURE_SUBSCRIPTION_KEY_QUERY_PARAM = "subscription-key";
 
     /**
      * Deploys an API to the Azure API Management Gateway.
@@ -126,7 +128,10 @@ public class AzureAPIUtil {
                     .withExistingService(resourceGroup, serviceName).withDisplayName(versionSetId)
                     .withVersioningScheme(VersioningScheme.SEGMENT).create();
 
-            ApiContract apiContract = manager.apis()
+            boolean apiKeyEnabled = hasSecurityToken(api.getApiSecurity(), AzureConstants.AZURE_API_SECURITY_API_KEY);
+            String effectiveApiKeyHeader = resolveEffectiveApiKeyHeader(api.getApiKeyHeader());
+
+            ApiContract.DefinitionStages.WithCreate apiDefinition = manager.apis()
                     .define(api.getUuid()) // Use UUID as the API name since name needs to be unique
                     .withExistingService(resourceGroup, serviceName)
                     .withDisplayName(api.getId().getApiName())
@@ -136,9 +141,15 @@ public class AzureAPIUtil {
                     .withFormat(ContentFormat.OPENAPI)
                     .withApiVersionSetId(versionSetContract.id())
                     .withApiVersion(api.getId().getVersion())
-                    .withSubscriptionRequired(false)
-                    .withProtocols(azureTransports)
-                    .create();
+                    .withSubscriptionRequired(apiKeyEnabled)
+                    .withProtocols(azureTransports);
+
+            if (apiKeyEnabled) {
+                apiDefinition = apiDefinition.withSubscriptionKeyParameterNames(
+                        buildSubscriptionKeyParameterNames(effectiveApiKeyHeader));
+            }
+
+            ApiContract apiContract = apiDefinition.create();
 
             if (api.getDescription() != null && !api.getDescription().isEmpty()) {
                 apiContract.update().withDescription(api.getDescription()).withIfMatch("*").apply();
@@ -251,16 +262,47 @@ public class AzureAPIUtil {
         }
         referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH,
                 apiRevisionContract.createdDateTime().toInstant().toEpochMilli());
-        boolean apiKeyEnabled = api.getApiSecurity() != null
-                && api.getApiSecurity().contains(AzureConstants.AZURE_API_SECURITY_API_KEY);
+        boolean apiKeyEnabled = Boolean.TRUE.equals(apiContract.subscriptionRequired());
         referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED,
                 apiKeyEnabled);
-        if (StringUtils.isNotBlank(api.getApiKeyHeader())) {
+        String effectiveApiKeyHeader = resolveEffectiveApiKeyHeader(apiContract);
+        if (StringUtils.isNotBlank(effectiveApiKeyHeader)) {
             referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER,
-                    api.getApiKeyHeader());
+                    effectiveApiKeyHeader);
         }
         Gson gson = new Gson();
         return gson.toJson(referenceArtifact);
+    }
+
+    private static SubscriptionKeyParameterNamesContract buildSubscriptionKeyParameterNames(String apiKeyHeader) {
+        return new SubscriptionKeyParameterNamesContract()
+                .withHeaderProperty(apiKeyHeader)
+                .withQuery(DEFAULT_AZURE_SUBSCRIPTION_KEY_QUERY_PARAM);
+    }
+
+    private static String resolveEffectiveApiKeyHeader(String apiKeyHeader) {
+        return StringUtils.isNotBlank(apiKeyHeader) ? apiKeyHeader
+                : AzureConstants.AZURE_DEFAULT_SUBSCRIPTION_KEY_HEADER;
+    }
+
+    private static String resolveEffectiveApiKeyHeader(ApiContract apiContract) {
+        if (apiContract != null && apiContract.subscriptionKeyParameterNames() != null
+                && StringUtils.isNotBlank(apiContract.subscriptionKeyParameterNames().headerProperty())) {
+            return apiContract.subscriptionKeyParameterNames().headerProperty();
+        }
+        return AzureConstants.AZURE_DEFAULT_SUBSCRIPTION_KEY_HEADER;
+    }
+
+    private static boolean hasSecurityToken(String apiSecurity, String expectedToken) {
+        if (StringUtils.isBlank(apiSecurity) || StringUtils.isBlank(expectedToken)) {
+            return false;
+        }
+        for (String token : apiSecurity.split(",")) {
+            if (expectedToken.equalsIgnoreCase(token.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void addPoliciesToPolicyBuilder(OperationPolicy policy, AzurePolicyBuilder policyBuilder)

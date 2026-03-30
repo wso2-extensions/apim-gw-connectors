@@ -27,7 +27,12 @@
         "subscriptionless": true
       },
       "apiKeys": {
-        "supported": false
+        "supported": false,
+        "optionSupport": {
+          "expiry": "unsupported",
+          "permittedIP": "unsupported",
+          "permittedReferer": "unsupported"
+        }
       },
       "endpoints": [
         "typePRODUCTION",

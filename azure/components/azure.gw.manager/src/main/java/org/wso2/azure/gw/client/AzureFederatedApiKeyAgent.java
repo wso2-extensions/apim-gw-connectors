@@ -118,6 +118,15 @@ public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
             metadata.put("primaryKey", subscription.primaryKey());
             metadata.put("secondaryKey", subscription.secondaryKey());
             metadata.put("scope", subscription.scope());
+            if (context.getValidityPeriod() != null) {
+                metadata.put("requestedValidityPeriod", context.getValidityPeriod());
+            }
+            if (StringUtils.isNotBlank(context.getPermittedIP())) {
+                metadata.put("requestedPermittedIP", context.getPermittedIP());
+            }
+            if (StringUtils.isNotBlank(context.getPermittedReferer())) {
+                metadata.put("requestedPermittedReferer", context.getPermittedReferer());
+            }
             
             return CredentialCreationResult.builder()
                     .remoteCredentialId(subscription.name())

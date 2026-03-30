@@ -106,6 +106,7 @@ public class AWSAPIUtil {
 
         String openAPI = api.getSwaggerDefinition();
         String apiId = null;
+        boolean apiKeyEnabled = requiresNativeApiKey(api);
 
         try {
             ImportRestApiRequest importApiRequest = ImportRestApiRequest.builder()
@@ -116,7 +117,7 @@ public class AWSAPIUtil {
             //import rest API with the openapi definition
             ImportRestApiResponse importApiResponse = apiGatewayClient.importRestApi(importApiRequest);
             apiId = importApiResponse.id();
-            if (requiresNativeApiKey(api)) {
+            if (apiKeyEnabled) {
                 apiGatewayClient.updateRestApi(UpdateRestApiRequest.builder()
                         .restApiId(apiId)
                         .patchOperations(PatchOperation.builder().op(Op.REPLACE).path("/apiKeySource")
@@ -192,12 +193,8 @@ public class AWSAPIUtil {
                                         .build();
                         apiGatewayClient.putIntegrationResponse(putIntegrationResponseRequest);
 
-                        if (requiresNativeApiKey(api) && !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
-                            List<PatchOperation> patchOperations = new ArrayList<>();
-                            // Authorizer wiring is managed outside the connector. The connector only enables
-                            // native AWS API key enforcement for API-key-secured APIs.
-                            patchOperations.add(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
-                                    .value("true").build());
+                        if (!"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
+                            List<PatchOperation> patchOperations = getApiKeyRequirementPatchOperations(apiKeyEnabled);
                             UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder().restApiId(apiId)
                                     .resourceId(resource.id()).httpMethod(entry.getKey().toString())
                                     .patchOperations(patchOperations).build();
@@ -231,6 +228,7 @@ public class AWSAPIUtil {
     public static String reimportRestAPI(String referenceArtifact, API api, ApiGatewayClient apiGatewayClient,
                                          String region, String stage) throws APIManagementException {
         String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(referenceArtifact);
+        boolean apiKeyEnabled = requiresNativeApiKey(api);
         try {
             String openAPI = api.getSwaggerDefinition();
 
@@ -243,7 +241,7 @@ public class AWSAPIUtil {
             PutRestApiResponse reimportApiResponse = apiGatewayClient.putRestApi(reimportApiRequest);
 
             awsApiId = reimportApiResponse.id();
-            if (requiresNativeApiKey(api)) {
+            if (apiKeyEnabled) {
                 apiGatewayClient.updateRestApi(UpdateRestApiRequest.builder()
                         .restApiId(awsApiId)
                         .patchOperations(PatchOperation.builder().op(Op.REPLACE).path("/apiKeySource")
@@ -321,12 +319,8 @@ public class AWSAPIUtil {
                                         .build();
                         apiGatewayClient.putIntegrationResponse(putIntegrationResponseRequest);
 
-                        if (requiresNativeApiKey(api) && !"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
-                            List<PatchOperation> patchOperations = new ArrayList<>();
-                            // Authorizer wiring is managed outside the connector. The connector only enables
-                            // native AWS API key enforcement for API-key-secured APIs.
-                            patchOperations.add(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
-                                    .value("true").build());
+                        if (!"OPTIONS".equalsIgnoreCase(entry.getKey().toString())) {
+                            List<PatchOperation> patchOperations = getApiKeyRequirementPatchOperations(apiKeyEnabled);
                             UpdateMethodRequest updateMethodRequest = UpdateMethodRequest.builder().restApiId(awsApiId)
                                     .resourceId(resource.id()).httpMethod(entry.getKey().toString())
                                     .patchOperations(patchOperations).build();
@@ -626,7 +620,24 @@ public class AWSAPIUtil {
     }
 
     private static boolean requiresNativeApiKey(API api) {
-        return api != null && api.getApiSecurity() != null && api.getApiSecurity().contains(API_KEY_SECURITY);
+        return api != null && hasSecurityToken(api.getApiSecurity(), API_KEY_SECURITY);
+    }
+
+    private static List<PatchOperation> getApiKeyRequirementPatchOperations(boolean apiKeyEnabled) {
+        return Collections.singletonList(PatchOperation.builder().op(Op.REPLACE).path("/apiKeyRequired")
+                .value(Boolean.toString(apiKeyEnabled)).build());
+    }
+
+    private static boolean hasSecurityToken(String apiSecurity, String expectedToken) {
+        if (apiSecurity == null || expectedToken == null) {
+            return false;
+        }
+        for (String token : apiSecurity.split(",")) {
+            if (expectedToken.equalsIgnoreCase(token.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static final class ApiKeySecurityContext {

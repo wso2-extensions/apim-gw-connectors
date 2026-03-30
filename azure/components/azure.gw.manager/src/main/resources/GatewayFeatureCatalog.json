@@ -21,7 +21,12 @@
           "revoke"
         ],
         "associationRequiredForInvocation": false,
-        "headerName": "Ocp-Apim-Subscription-Key"
+        "headerName": "Ocp-Apim-Subscription-Key",
+        "optionSupport": {
+          "expiry": "metadata",
+          "permittedIP": "metadata",
+          "permittedReferer": "metadata"
+        }
       },
       "endpoints": ["http", "typePRODUCTION"],
       "endpointSecurity": [],

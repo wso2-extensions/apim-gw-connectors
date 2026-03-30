@@ -29,6 +29,7 @@ import java.util.List;
 public class KongKeyAuth {
     private String id;
     private String key;
+    private Long ttl;
     private List<String> tags;
     @SerializedName("created_at")
     private Long createdAt;
@@ -71,6 +72,14 @@ public class KongKeyAuth {
 
     public void setTags(List<String> tags) {
         this.tags = tags;
+    }
+
+    public Long getTtl() {
+        return ttl;
+    }
+
+    public void setTtl(Long ttl) {
+        this.ttl = ttl;
     }
 
     public Long getCreatedAt() {

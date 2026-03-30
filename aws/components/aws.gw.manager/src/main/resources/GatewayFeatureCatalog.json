@@ -31,7 +31,12 @@
           "dissociate"
         ],
         "associationRequiredForInvocation": true,
-        "headerName": "ApiKey"
+        "headerName": "ApiKey",
+        "optionSupport": {
+          "expiry": "tag",
+          "permittedIP": "tag",
+          "permittedReferer": "tag"
+        }
       },
       "endpoints": [
         "http",

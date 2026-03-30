@@ -65,6 +65,9 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
     private static final String TAG_KEY_UUID = "wso2:key-uuid";
     private static final String TAG_AUTHZ_USER = "wso2:authz-user";
     private static final String TAG_ORGANIZATION = "wso2:organization";
+    private static final String TAG_VALIDITY_PERIOD = "wso2:key-validity-period";
+    private static final String TAG_PERMITTED_IP = "wso2:key-permitted-ip";
+    private static final String TAG_PERMITTED_REFERER = "wso2:key-permitted-referer";
 
     private KongKonnectApi apiGatewayClient;
     private String controlPlaneId;
@@ -125,6 +128,9 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
 
             KongKeyAuth keyAuthRequest = new KongKeyAuth();
             keyAuthRequest.setKey(context.getApiKeyValue());
+            if (context.getValidityPeriod() != null && context.getValidityPeriod() > 0) {
+                keyAuthRequest.setTtl(context.getValidityPeriod());
+            }
             keyAuthRequest.setTags(metadataTags);
             KongKeyAuth keyAuth = createKeyAuthWithTagFallback(consumerId, keyAuthRequest);
             if (keyAuth == null || StringUtils.isBlank(keyAuth.getId())) {
@@ -469,6 +475,7 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
                         + consumerId, e);
                 KongKeyAuth fallbackRequest = new KongKeyAuth();
                 fallbackRequest.setKey(keyAuthRequest.getKey());
+                fallbackRequest.setTtl(keyAuthRequest.getTtl());
                 fallbackRequest.setTags(Collections.emptyList());
                 try {
                     return apiGatewayClient.createKeyAuth(controlPlaneId, consumerId, fallbackRequest);
@@ -489,6 +496,11 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
         addTag(tags, TAG_KEY_UUID, context != null ? context.getApiKeyUuid() : null);
         addTag(tags, TAG_AUTHZ_USER, context != null ? context.getAuthzUser() : null);
         addTag(tags, TAG_ORGANIZATION, context != null ? context.getOrganizationId() : null);
+        if (context != null && context.getValidityPeriod() != null) {
+            addTag(tags, TAG_VALIDITY_PERIOD, String.valueOf(context.getValidityPeriod()));
+        }
+        addTag(tags, TAG_PERMITTED_IP, context != null ? context.getPermittedIP() : null);
+        addTag(tags, TAG_PERMITTED_REFERER, context != null ? context.getPermittedReferer() : null);
         return tags;
     }
 

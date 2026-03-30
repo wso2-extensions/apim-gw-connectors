@@ -42,7 +42,12 @@
           "dissociate"
         ],
         "associationRequiredForInvocation": true,
-        "headerName": "apikey"
+        "headerName": "apikey",
+        "optionSupport": {
+          "expiry": "native_and_tag",
+          "permittedIP": "tag",
+          "permittedReferer": "tag"
+        }
       },
       "endpoints": [
         "http",
