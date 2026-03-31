@@ -64,8 +64,8 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
     }
 
     @Override
-    public String getApiKeyAgentImplementation() {
-        return KongFederatedApiKeyAgent.class.getName();
+    public String getApiKeyConnectorImplementation() {
+        return KongFederatedApiKeyConnector.class.getName();
     }
 
     @Override

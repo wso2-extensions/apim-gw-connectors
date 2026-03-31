@@ -34,7 +34,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
-import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
+import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
 import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
@@ -50,9 +50,9 @@ import java.util.Map;
  * Azure implementation of federated API key management.
  * This follows API-bound key provisioning using Azure APIM subscriptions scoped to a single API.
  */
-public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
+public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
 
-    private static final Log log = LogFactory.getLog(AzureFederatedApiKeyAgent.class);
+    private static final Log log = LogFactory.getLog(AzureFederatedApiKeyConnector.class);
 
     private String resourceGroup;
     private String serviceName;
@@ -87,7 +87,7 @@ public class AzureFederatedApiKeyAgent implements FederatedApiKeyAgent {
                 throw new APIManagementException("Missing required Azure environment configurations");
             }
         } catch (Exception e) {
-            throw new APIManagementException("Error occurred while initializing Azure Federated API Key Agent", e);
+            throw new APIManagementException("Error occurred while initializing Azure Federated API Key Connector", e);
         }
     }
 

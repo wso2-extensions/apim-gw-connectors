@@ -66,8 +66,8 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
     }
 
     @Override
-    public String getApiKeyAgentImplementation() {
-        return AWSFederatedApiKeyAgent.class.getName();
+    public String getApiKeyConnectorImplementation() {
+        return AWSFederatedApiKeyConnector.class.getName();
     }
 
     @Override

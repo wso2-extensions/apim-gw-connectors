@@ -31,7 +31,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.apimgt.api.APIManagementException;
-import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
+import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
 import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
@@ -54,9 +54,9 @@ import java.util.Map;
 /**
  * Kong implementation of federated API key management.
  */
-public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
+public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
 
-    private static final Log log = LogFactory.getLog(KongFederatedApiKeyAgent.class);
+    private static final Log log = LogFactory.getLog(KongFederatedApiKeyConnector.class);
     private static final int HTTP_NOT_FOUND = 404;
     private static final int HTTP_CONFLICT = 409;
     private static final int MAX_TAG_LENGTH = 256;
@@ -102,7 +102,7 @@ public class KongFederatedApiKeyAgent implements FederatedApiKeyAgent {
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {
-            throw new APIManagementException("Error occurred while initializing Kong Federated API Key Agent", e);
+            throw new APIManagementException("Error occurred while initializing Kong Federated API Key Connector", e);
         }
     }
 

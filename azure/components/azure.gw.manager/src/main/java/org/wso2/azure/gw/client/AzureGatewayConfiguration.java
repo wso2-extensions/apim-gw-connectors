@@ -71,8 +71,8 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
     }
 
     @Override
-    public String getApiKeyAgentImplementation() {
-        return AzureFederatedApiKeyAgent.class.getName();
+    public String getApiKeyConnectorImplementation() {
+        return AzureFederatedApiKeyConnector.class.getName();
     }
 
     /**

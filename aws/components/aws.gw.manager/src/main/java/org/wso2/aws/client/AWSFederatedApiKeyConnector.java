@@ -24,7 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.aws.client.util.GatewayUtil;
 import org.wso2.carbon.apimgt.api.APIManagementException;
-import org.wso2.carbon.apimgt.api.FederatedApiKeyAgent;
+import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
 import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
@@ -53,9 +53,9 @@ import java.util.Map;
 /**
  * AWS implementation of federated API key management.
  */
-public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
+public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
 
-    private static final Log log = LogFactory.getLog(AWSFederatedApiKeyAgent.class);
+    private static final Log log = LogFactory.getLog(AWSFederatedApiKeyConnector.class);
     private static final int MAX_TAG_LENGTH = 256;
 
     private static final String TAG_API_ID = "wso2:api-id";
@@ -107,7 +107,7 @@ public class AWSFederatedApiKeyAgent implements FederatedApiKeyAgent {
                             .create(AwsBasicCredentials.create(accessKey, secretKey)))
                     .build();
         } catch (Exception e) {
-            throw new APIManagementException("Error occurred while initializing AWS Federated API Key Agent", e);
+            throw new APIManagementException("Error occurred while initializing AWS Federated API Key Connector", e);
         }
     }
 
