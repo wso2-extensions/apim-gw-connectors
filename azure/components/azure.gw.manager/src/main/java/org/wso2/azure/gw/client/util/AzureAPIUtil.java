@@ -39,6 +39,7 @@ import com.azure.resourcemanager.apimanagement.models.OperationContract;
 import com.azure.resourcemanager.apimanagement.models.PolicyContentFormat;
 import com.azure.resourcemanager.apimanagement.models.PolicyIdName;
 import com.azure.resourcemanager.apimanagement.models.Protocol;
+import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.azure.resourcemanager.apimanagement.models.VersioningScheme;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -60,16 +61,12 @@ import org.wso2.azure.gw.client.policy.policies.AzureRateLimitPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureSetHeaderPolicy;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
-import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
-import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * This class contains utility methods to interact with Azure API Gateway.
@@ -114,10 +111,10 @@ public class AzureAPIUtil {
 
             List<String> wso2Transports = Arrays.asList(api.getTransports().split(","));
             List<Protocol> azureTransports = new ArrayList<>();
-            if (wso2Transports.contains("http")) {
+            if (wso2Transports.contains(AzureConstants.AZURE_PROTOCOL_HTTP)) {
                 azureTransports.add(Protocol.HTTP);
             }
-            if (wso2Transports.contains("https")) {
+            if (wso2Transports.contains(AzureConstants.AZURE_PROTOCOL_HTTPS)) {
                 azureTransports.add(Protocol.HTTPS);
             }
 
@@ -383,44 +380,111 @@ public class AzureAPIUtil {
         return content;
     }
 
-    public static API restAPItoAPI(ApiContract apiContract, String apiDefinition, String organization,
-                                   Environment environment) {
-        APIIdentifier apiIdentifier = new APIIdentifier("admin", apiContract.displayName(),
-                apiContract.apiVersion() != null ? apiContract.apiVersion() : "1.0.0");
-
-        API api = new API(apiIdentifier);
-
-        String context = "/";
-        context += apiContract.path().isEmpty() ? AzureConstants.AZURE_NO_CONTEXT : apiContract.path();
-        String contextTemplate = context + "/{version}";
-        context += "/" + apiIdentifier.getVersion();
-
-        api.setDisplayName(apiContract.displayName());
-        api.setUuid(UUID.randomUUID().toString());
-        api.setDescription(apiContract.description());
-        api.setContext(context);
-        api.setContextTemplate(contextTemplate);
-        api.setOrganization(organization);
-        api.setSwaggerDefinition(apiDefinition);
-        api.setRevision(false);
-        api.setInitiatedFromGateway(true);
-        api.setGatewayVendor("external");
-        api.setGatewayType(environment.getGatewayType());
-        if (apiContract.serviceUrl() != null) {
-            api.setEndpointConfig(AzureAPIUtil.buildEndpointConfigJson(
-                    apiContract.serviceUrl(), apiContract.serviceUrl(), false));
-        }
-        api.setAvailableTiers(new HashSet<>(java.util.Collections.singleton(new Tier("Unlimited"))));
-        return api;
-    }
-
     /**
      * Build endpointConfig JSON using Gson.
      * Both production and sandbox endpoints are included.
      */
-    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver) {
+    public static String loadAsyncApiTemplate(String title, String version, String serverUrl, String protocol) {
+        try (java.io.InputStream inputStream = AzureAPIUtil.class.getClassLoader()
+                .getResourceAsStream("asyncapi-template.json")) {
+            if (inputStream == null) {
+                log.error("AsyncAPI template file not found in resources");
+                return null;
+            }
+            try (java.util.Scanner scanner = new java.util.Scanner(inputStream, "UTF-8")) {
+                String content = scanner.useDelimiter("\\A").next();
+                return content.replace("${TITLE}", title)
+                        .replace("${VERSION}", version)
+                        .replace("${SERVER_URL}", serverUrl)
+                        .replace("${PROTOCOL}", protocol);
+            }
+        } catch (java.io.IOException e) {
+            log.error("Error loading AsyncAPI template", e);
+            return null;
+        }
+    }
+
+    /**
+     * Build WebSocket URL for AsyncAPI definition.
+     * Format: ws(s)://hostname/path[/version]
+     * Note: Version is excluded if it's the default version (1.0.0)
+     * 
+     * @param environment The WSO2 environment containing gateway endpoint
+     * @param apiContract The Azure API contract
+     * @param protocol The WebSocket protocol ("ws" or "wss")
+     * @return The formatted WebSocket URL
+     */
+    public static String buildWebSocketUrl(Environment environment, ApiContract apiContract, String protocol) {
+        String gatewayEndpoint = environment.getApiGatewayEndpoint();
+        if (log.isDebugEnabled()) {
+            log.debug("Original gateway endpoint: " + gatewayEndpoint);
+        }
+        
+        if (gatewayEndpoint == null || gatewayEndpoint.isEmpty()) {
+            return "";
+        }
+        
+        // Handle multiple endpoints (take first if comma-separated)
+        if (gatewayEndpoint.contains(",")) {
+            gatewayEndpoint = gatewayEndpoint.split(",")[0].trim();
+            if (log.isDebugEnabled()) {
+                log.debug("After comma split: " + gatewayEndpoint);
+            }
+        }
+        
+        String hostname = gatewayEndpoint;
+        
+        hostname = hostname.replaceFirst("^https?://", "");
+        if (log.isDebugEnabled()) {
+            log.debug("After removing protocol: " + hostname);
+        }
+        
+        int portIndex = hostname.indexOf(':');
+        if (portIndex > 0) {
+            hostname = hostname.substring(0, portIndex);
+            if (log.isDebugEnabled()) {
+                log.debug("After removing port: " + hostname);
+            }
+        }
+        
+        int pathIndex = hostname.indexOf('/');
+        if (pathIndex > 0) {
+            hostname = hostname.substring(0, pathIndex);
+            if (log.isDebugEnabled()) {
+                log.debug("After removing path: " + hostname);
+            }
+        }
+        
+        StringBuilder url = new StringBuilder();
+        url.append(AzureConstants.AZURE_PROTOCOL_WS.equalsIgnoreCase(protocol) ? "ws://" : "wss://");
+        url.append(hostname);
+        
+        String path = apiContract.path();
+        if (path != null && !path.isEmpty()) {
+            if (!path.startsWith("/")) {
+                url.append("/");
+            }
+            url.append(path);
+        }
+        
+        String version = apiContract.apiVersion();
+        if (version != null && !version.isEmpty() && !"1.0.0".equals(version)) {
+            if (url.charAt(url.length() - 1) != '/') {
+                url.append("/");
+            }
+            url.append(version);
+        }
+        
+        String finalUrl = url.toString();
+        if (log.isDebugEnabled()) {
+            log.debug("Final WebSocket URL: " + finalUrl);
+        }
+        return finalUrl;
+    }
+
+    public static String buildEndpointConfigJson(String productionUrl, String sandboxUrl, boolean failOver, String endpointType) {
         JsonObject endpointConfig = new JsonObject();
-        endpointConfig.addProperty("endpoint_type", "http");
+        endpointConfig.addProperty("endpoint_type", endpointType);
         endpointConfig.addProperty("failOver", failOver);
 
         JsonObject prod = new JsonObject();
