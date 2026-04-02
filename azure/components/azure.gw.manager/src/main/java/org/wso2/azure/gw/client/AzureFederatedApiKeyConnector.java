@@ -35,10 +35,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
-import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
+import org.wso2.carbon.apimgt.api.model.FederatedApiKeyCreationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
 
 import java.util.ArrayList;
@@ -92,7 +92,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
     }
 
     @Override
-    public CredentialCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
+    public FederatedApiKeyCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
         if (context == null || StringUtils.isBlank(context.getApiReferenceArtifact())
                 || StringUtils.isBlank(context.getApiKeyValue())) {
             throw new APIManagementException("API reference artifact and API key value are required");
@@ -128,7 +128,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
                 metadata.put("requestedPermittedReferer", context.getPermittedReferer());
             }
             
-            return CredentialCreationResult.builder()
+            return FederatedApiKeyCreationResult.builder()
                     .remoteCredentialId(subscription.name())
                     .credentialType("AZURE_SUBSCRIPTION")
                     .metadata(metadata)
@@ -186,6 +186,11 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
         } catch (APIManagementException e) {
             log.warn("Error while resolving Azure API key support from GatewayFeatureCatalog", e);
         }
+        return false;
+    }
+
+    @Override
+    public boolean supportsRemotePlanListing() {
         return false;
     }
 

@@ -32,10 +32,10 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
-import org.wso2.carbon.apimgt.api.model.CredentialCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.ExternalSubscriptionPolicy;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
+import org.wso2.carbon.apimgt.api.model.FederatedApiKeyCreationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
 import org.wso2.kong.client.model.KongAcl;
@@ -107,7 +107,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     }
 
     @Override
-    public CredentialCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
+    public FederatedApiKeyCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
         if (context == null || StringUtils.isAnyBlank(context.getApiKeyUuid(), context.getApiKeyValue())) {
             throw new APIManagementException("API key UUID and value are required");
         }
@@ -138,7 +138,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             }
             apiGatewayClient.createAcl(controlPlaneId, consumerId, new KongAcl(buildApiAclGroup(remoteApiId)));
             
-            return CredentialCreationResult.builder()
+            return FederatedApiKeyCreationResult.builder()
                     .remoteCredentialId(consumerId)
                     .credentialType("KONG_CONSUMER")
                     .build();
@@ -268,6 +268,11 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
         } catch (Exception e) {
             throw new APIManagementException("Failed to list Kong consumer groups: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public boolean supportsRemotePlanListing() {
+        return true;
     }
 
     @Override

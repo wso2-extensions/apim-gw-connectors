@@ -112,7 +112,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
     }
 
     @Override
-    public CredentialCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
+    public FederatedApiKeyCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
         if (StringUtils.isBlank(context.getApiKeyValue())) {
             throw new APIManagementException("API key value is required to create AWS API key");
         }
@@ -127,7 +127,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
                     .build();
             CreateApiKeyResponse response = apiGatewayClient.createApiKey(request);
             
-            return CredentialCreationResult.builder()
+            return FederatedApiKeyCreationResult.builder()
                     .remoteCredentialId(response.id())
                     .credentialType("AWS_API_KEY")
                     .build();
@@ -260,6 +260,11 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
             throw new APIManagementException("Failed to list AWS Usage Plans: " + e.getMessage(), e);
         }
         return rateLimitPolicies;
+    }
+
+    @Override
+    public boolean supportsRemotePlanListing() {
+        return true;
     }
 
     private Map<String, String> buildTags(FederatedApiKeyContext context, String awsApiId) {
