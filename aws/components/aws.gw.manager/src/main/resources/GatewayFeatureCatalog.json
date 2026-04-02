@@ -16,7 +16,28 @@
         "policies"
       ],
       "monetization": [],
-      "subscriptions": [],
+      "subscriptions": {
+        "supported": true,
+        "subscriptionless": false
+      },
+      "apiKeys": {
+        "supported": true,
+        "federated": true,
+        "operations": [
+          "issue",
+          "regenerate",
+          "revoke",
+          "associate",
+          "dissociate"
+        ],
+        "associationRequiredForInvocation": true,
+        "headerName": "ApiKey",
+        "optionSupport": {
+          "expiry": "tag",
+          "permittedIP": "tag",
+          "permittedReferer": "tag"
+        }
+      },
       "endpoints": [
         "http",
         "typePRODUCTION"

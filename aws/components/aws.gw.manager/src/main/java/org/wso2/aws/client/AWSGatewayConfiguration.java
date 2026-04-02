@@ -66,6 +66,11 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
     }
 
     @Override
+    public String getApiKeyConnectorImplementation() {
+        return AWSFederatedApiKeyConnector.class.getName();
+    }
+
+    @Override
     public List<ConfigurationDto> getConnectionConfigurations() {
         List<ConfigurationDto> configurationDtoList = new ArrayList<>();
         configurationDtoList

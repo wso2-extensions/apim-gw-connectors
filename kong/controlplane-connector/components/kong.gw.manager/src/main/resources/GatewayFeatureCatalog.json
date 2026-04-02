@@ -27,9 +27,28 @@
       "monetization": [
         "monetization"
       ],
-      "subscriptions": [
-        "subscriptions"
-      ],
+      "subscriptions": {
+        "supported": true,
+        "subscriptionless": false
+      },
+      "apiKeys": {
+        "supported": true,
+        "federated": true,
+        "operations": [
+          "issue",
+          "regenerate",
+          "revoke",
+          "associate",
+          "dissociate"
+        ],
+        "associationRequiredForInvocation": true,
+        "headerName": "apikey",
+        "optionSupport": {
+          "expiry": "native_and_tag",
+          "permittedIP": "tag",
+          "permittedReferer": "tag"
+        }
+      },
       "endpoints": [
         "http",
         "typePRODUCTION",

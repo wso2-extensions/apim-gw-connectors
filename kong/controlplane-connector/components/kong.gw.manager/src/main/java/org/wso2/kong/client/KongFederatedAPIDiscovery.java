@@ -19,6 +19,8 @@
 package org.wso2.kong.client;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 import feign.Feign;
 import feign.RequestInterceptor;
@@ -136,7 +138,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
                 List<DiscoveredAPI> retrievedAPIs = new ArrayList<>();
                 Set<String> linkedServices = new HashSet<>();
-            Gson gson = new Gson();
+                Gson gson = new Gson();
 
                 // Iterate APIs
                 for (KongAPI kongAPI : apis) {
@@ -204,11 +206,11 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                     // add to linked services to avoid duplicates
                     linkedServices.add(svc.getId());
 
-                    // Fetch plugin related to services
-                    PagedResponse<KongPlugin> pluginsResp = apiGatewayClient.listPluginsByServiceId(controlPlaneId,
-                            svc.getId(), KongConstants.DEFAULT_PLUGIN_LIST_LIMIT);
-                    List<KongPlugin> plugins = (pluginsResp != null && pluginsResp.getData() != null)
-                            ? pluginsResp.getData() : Collections.<KongPlugin>emptyList();
+                    PagedResponse<KongRoute> routesResp = apiGatewayClient.listRoutesByServiceId(controlPlaneId,
+                            svc.getId(), KongConstants.DEFAULT_ROUTE_LIST_LIMIT);
+                    List<KongRoute> routes = (routesResp != null && routesResp.getData() != null)
+                            ? routesResp.getData() : Collections.<KongRoute>emptyList();
+                    List<KongPlugin> plugins = collectPluginsForServiceAndRoutes(svc.getId(), routes);
 
                     for (KongPlugin plugin : plugins) {
                         String pluginType = plugin.getName();
@@ -235,11 +237,24 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             }
                         }
                     }
+
+                    String apiKeyHeader = resolveKeyAuthHeader(plugins);
+                    boolean apiKeyEnabled = apiKeyHeader != null;
+                    if (apiKeyEnabled) {
+                        api.setApiSecurity(KongConstants.KONG_API_SECURITY_API_KEY);
+                        api.setApiKeyHeader(apiKeyHeader);
+                        if (api.getSwaggerDefinition() != null) {
+                            api.setSwaggerDefinition(KongAPIUtil.applyApiKeySecurityToOas(
+                                    api.getSwaggerDefinition(), apiKeyHeader));
+                        }
+                    }
                     if (selectedAPILevelRateLimitPolicy != null) {
                         api.setApiLevelPolicy(selectedAPILevelRateLimitPolicy);
                     }
-    DiscoveredAPI discoveredAPI = new DiscoveredAPI(api, gson.toJson(api));
-                retrievedAPIs.add(discoveredAPI);
+                    String referenceArtifact = generateReferenceArtifact(gson, api.getUuid(), apiKeyEnabled,
+                            apiKeyHeader, kongAPI);
+                    DiscoveredAPI discoveredAPI = new DiscoveredAPI(api, referenceArtifact);
+                    retrievedAPIs.add(discoveredAPI);
                 }
 
                 // If there are Services without APIs, we can still retrieve them as APIs
@@ -262,10 +277,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                     List<KongRoute> routes = (resp != null && resp.getData() != null) ?
                             resp.getData() : java.util.Collections.emptyList();
 
-                    PagedResponse<KongPlugin> pluginsResp = apiGatewayClient.listPluginsByServiceId(controlPlaneId,
-                            svc.getId(), KongConstants.DEFAULT_PLUGIN_LIST_LIMIT);
-                    List<KongPlugin> plugins = (pluginsResp != null && pluginsResp.getData() != null)
-                            ? pluginsResp.getData() : java.util.Collections.<KongPlugin>emptyList();
+                    List<KongPlugin> plugins = collectPluginsForServiceAndRoutes(svc.getId(), routes);
 
                     APIIdentifier apiId = new APIIdentifier(KongConstants.DEFAULT_API_PROVIDER, svc.getName(),
                             KongConstants.DEFAULT_API_VERSION);
@@ -328,11 +340,22 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             }
                         }
                     }
+
+                    String apiKeyHeader = resolveKeyAuthHeader(plugins);
+                    boolean apiKeyEnabled = apiKeyHeader != null;
+                    if (apiKeyEnabled) {
+                        api.setApiSecurity(KongConstants.KONG_API_SECURITY_API_KEY);
+                        api.setApiKeyHeader(apiKeyHeader);
+                        api.setSwaggerDefinition(KongAPIUtil.applyApiKeySecurityToOas(api.getSwaggerDefinition(),
+                                apiKeyHeader));
+                    }
                     if (selectedAPILevelRateLimitPolicy != null) {
                         api.setApiLevelPolicy(selectedAPILevelRateLimitPolicy);
                     }
-                    DiscoveredAPI discoveredAPI = new DiscoveredAPI(api, gson.toJson(api));
-                retrievedAPIs.add(discoveredAPI);
+                    String referenceArtifact = generateReferenceArtifact(gson, api.getUuid(), apiKeyEnabled,
+                            apiKeyHeader, svc);
+                    DiscoveredAPI discoveredAPI = new DiscoveredAPI(api, referenceArtifact);
+                    retrievedAPIs.add(discoveredAPI);
                 }
                 return retrievedAPIs;
             } catch (KongGatewayException e) {
@@ -353,5 +376,69 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
     @Override
     public boolean isAPIUpdated(String existingReferenceArtifact, String newReferenceArtifact) {
         return !java.util.Objects.equals(existingReferenceArtifact, newReferenceArtifact);
+    }
+
+    private String resolveKeyAuthHeader(List<KongPlugin> plugins) {
+        if (plugins == null) {
+            return null;
+        }
+        for (KongPlugin plugin : plugins) {
+            if (plugin == null || plugin.getName() == null) {
+                continue;
+            }
+            if (KongConstants.KONG_KEY_AUTH_PLUGIN_TYPE.equals(plugin.getName())
+                    && !Boolean.FALSE.equals(plugin.getEnabled())) {
+                return KongAPIUtil.resolveApiKeyHeader(plugin);
+            }
+        }
+        return null;
+    }
+
+    private String generateReferenceArtifact(Gson gson, String apiId, boolean apiKeyEnabled, String apiKeyHeader,
+                                             Object sourceArtifact) {
+        JsonObject reference = new JsonObject();
+        reference.addProperty(KongConstants.KONG_REFERENCE_ID, apiId);
+        reference.addProperty(KongConstants.KONG_REFERENCE_API_KEY_ENABLED, apiKeyEnabled);
+        if (apiKeyHeader != null && !apiKeyHeader.trim().isEmpty()) {
+            reference.addProperty(KongConstants.KONG_REFERENCE_API_KEY_HEADER, apiKeyHeader.trim());
+        }
+        if (sourceArtifact != null) {
+            JsonElement source = gson.toJsonTree(sourceArtifact);
+            reference.add("source", source);
+        }
+        return gson.toJson(reference);
+    }
+
+    private List<KongPlugin> collectPluginsForServiceAndRoutes(String serviceId, List<KongRoute> routes)
+            throws KongGatewayException {
+        List<KongPlugin> collected = new ArrayList<>(listServicePlugins(serviceId));
+        if (routes == null || routes.isEmpty()) {
+            return collected;
+        }
+        for (KongRoute route : routes) {
+            if (route == null || route.getId() == null) {
+                continue;
+            }
+            collected.addAll(listRoutePlugins(route.getId()));
+        }
+        return collected;
+    }
+
+    private List<KongPlugin> listServicePlugins(String serviceId) throws KongGatewayException {
+        PagedResponse<KongPlugin> pluginsResp = apiGatewayClient.listPluginsByServiceId(controlPlaneId,
+                serviceId, KongConstants.DEFAULT_PLUGIN_LIST_LIMIT);
+        if (pluginsResp == null || pluginsResp.getData() == null) {
+            return Collections.emptyList();
+        }
+        return pluginsResp.getData();
+    }
+
+    private List<KongPlugin> listRoutePlugins(String routeId) throws KongGatewayException {
+        PagedResponse<KongPlugin> pluginsResp = apiGatewayClient.listPluginsByRouteId(controlPlaneId,
+                routeId, KongConstants.DEFAULT_PLUGIN_LIST_LIMIT);
+        if (pluginsResp == null || pluginsResp.getData() == null) {
+            return Collections.emptyList();
+        }
+        return pluginsResp.getData();
     }
 }

@@ -70,6 +70,11 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
         return AzureFederatedAPIDiscovery.class.getName();
     }
 
+    @Override
+    public String getApiKeyConnectorImplementation() {
+        return AzureFederatedApiKeyConnector.class.getName();
+    }
+
     /**
      * Returns the configuration values required to connect to Azure API Management.
      */
