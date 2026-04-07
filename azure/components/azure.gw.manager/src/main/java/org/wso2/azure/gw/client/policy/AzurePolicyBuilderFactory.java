@@ -46,17 +46,25 @@ public class AzurePolicyBuilderFactory {
 
     public AzurePolicyBuilderFactory() throws APIManagementException {
         DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setNamespaceAware(true);
+        documentBuilderFactory.setNamespaceAware(false);
         documentBuilderFactory.setIgnoringComments(false);
         documentBuilderFactory.setCoalescing(true);
+        documentBuilderFactory.setExpandEntityReferences(false);
+        documentBuilderFactory.setXIncludeAware(false);
         documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
         documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
         try {
-            documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             documentBuilderFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            documentBuilderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            documentBuilderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            documentBuilderFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
         } catch (ParserConfigurationException e) {
             if (log.isDebugEnabled()) {
-                log.debug("Disabling doctype declaration feature is not supported by the XML parser.", e);
+                log.debug(
+                        "One or more of the following XML processor features are not supported by the XML parser:" +
+                                " disallow-doctype-decl, external-general-entities, external-parameter-entities," +
+                                " nonvalidating/load-external-dtd", e);
             }
         }
         try {
