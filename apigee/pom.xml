@@ -71,7 +71,7 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- WSO2 APIM core APIs -->
+            
             <dependency>
                 <groupId>org.wso2.carbon.apimgt</groupId>
                 <artifactId>org.wso2.carbon.apimgt.impl</artifactId>
@@ -82,23 +82,17 @@
                 <artifactId>org.wso2.carbon.apimgt.api</artifactId>
                 <version>${carbon.apimgt.version}</version>
             </dependency>
-
-            <!--
-                Google Auth Library — the ONLY external transitive dependency
-                needed for Apigee.  Heavy exclusions below to prevent
-                OSGi "JAR Hell" inside WSO2.
-            -->
             <dependency>
                 <groupId>com.google.auth</groupId>
                 <artifactId>google-auth-library-oauth2-http</artifactId>
                 <version>${google.auth.version}</version>
                 <exclusions>
-                    <!-- SLF4J — WSO2 already ships its own -->
+                    
                     <exclusion>
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-api</artifactId>
                     </exclusion>
-                    <!-- Log4j — WSO2 already ships its own -->
+                    
                     <exclusion>
                         <groupId>org.apache.logging.log4j</groupId>
                         <artifactId>log4j-api</artifactId>
@@ -111,25 +105,21 @@
                         <groupId>log4j</groupId>
                         <artifactId>log4j</artifactId>
                     </exclusion>
-                    <!-- Commons Logging — WSO2 already ships its own -->
+                
                     <exclusion>
                         <groupId>commons-logging</groupId>
                         <artifactId>commons-logging</artifactId>
                     </exclusion>
-                    <!-- Commons Codec — WSO2 already ships its own -->
+                
                     <exclusion>
                         <groupId>commons-codec</groupId>
                         <artifactId>commons-codec</artifactId>
                     </exclusion>
-                    <!-- Gson — WSO2 already ships its own -->
+                   
                     <exclusion>
                         <groupId>com.google.code.gson</groupId>
                         <artifactId>gson</artifactId>
                     </exclusion>
-                    <!-- NOTE: Guava is NOT excluded here because the inlined google-auth
-                         classes reference com.google.common.* at runtime and it must
-                         be embedded into the connector bundle. -->
-                    <!-- Jackson — WSO2 already ships its own -->
                     <exclusion>
                         <groupId>com.fasterxml.jackson.core</groupId>
                         <artifactId>jackson-core</artifactId>
@@ -142,12 +132,12 @@
                         <groupId>com.fasterxml.jackson.core</groupId>
                         <artifactId>jackson-annotations</artifactId>
                     </exclusion>
-                    <!-- Error Prone annotations — not needed at runtime -->
+                    
                     <exclusion>
                         <groupId>com.google.errorprone</groupId>
                         <artifactId>error_prone_annotations</artifactId>
                     </exclusion>
-                    <!-- J2ObjC annotations — not needed at runtime -->
+                    
                     <exclusion>
                         <groupId>com.google.j2objc</groupId>
                         <artifactId>j2objc-annotations</artifactId>
@@ -155,8 +145,6 @@
                 </exclusions>
             </dependency>
 
-            <!-- Google HTTP Client (transitive dep of google-auth).
-                 Needs to be declared explicitly so we can control exclusions. -->
             <dependency>
                 <groupId>com.google.http-client</groupId>
                 <artifactId>google-http-client</artifactId>
@@ -182,7 +170,6 @@
                         <groupId>com.google.code.gson</groupId>
                         <artifactId>gson</artifactId>
                     </exclusion>
-                    <!-- NOTE: Guava is NOT excluded here — must be available for inlining -->
                     <exclusion>
                         <groupId>com.fasterxml.jackson.core</groupId>
                         <artifactId>jackson-core</artifactId>
@@ -202,7 +189,6 @@
                 </exclusions>
             </dependency>
 
-            <!-- Orbit bundles provisioned via feature -->
             <dependency>
                 <groupId>org.wso2.orbit.com.google.auth-library-oauth2-http</groupId>
                 <artifactId>google-auth-library-oauth2-http</artifactId>
@@ -253,11 +239,9 @@
         <carbon.p2.plugin.version>1.5.3</carbon.p2.plugin.version>
         <carbon.apimgt.version>9.32.74</carbon.apimgt.version>
 
-        <!-- Google Auth & HTTP Client versions -->
         <google.auth.version>1.20.0</google.auth.version>
         <google.http.client.version>1.43.3</google.http.client.version>
 
-        <!-- Orbit bundle versions used by apigee feature provisioning -->
         <org.wso2.orbit.google.auth.oauth2.http.version>1.20.0.wso2v2</org.wso2.orbit.google.auth.oauth2.http.version>
         <org.wso2.orbit.google.http.client.version>1.43.3.wso2v1</org.wso2.orbit.google.http.client.version>
         <org.wso2.orbit.grpc.context.version>1.59.0.wso2v1</org.wso2.orbit.grpc.context.version>

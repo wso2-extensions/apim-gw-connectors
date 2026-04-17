@@ -127,29 +127,12 @@ ApigeeFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
     /**
      * Discover all API proxies in the configured Apigee organisation.
-     * <p>
-     * Workflow:
-     * <ol>
-     *   <li>List all API proxies in the organisation.</li>
-     *   <li>For each proxy, check if it is deployed to the target environment.</li>
-     *   <li>If deployed: fetch OpenAPI spec and return the API.</li>
-     *   <li>If NOT deployed: create a minimal API with empty endpoints and return it.</li>
-     *   <li>This ensures WSO2 tracks deployment status changes via the reference artifact.</li>
-     * </ol>
-     * <p>
-     * The reference artifact includes a "deployed" field so that deployment status
-     * changes (deployed → undeployed → redeployed) are detected as updates.
      * This prevents duplicate APIs when redeploying.
      */
     @Override
     public List<DiscoveredAPI> discoverAPI() {
         List<DiscoveredAPI> retrievedAPIs = new ArrayList<>();
         try {
-            // Ensure access token is valid.
-            // refreshIfExpired() can throw on network failure (UnresolvedAddressException, etc.).
-            // In that case we return an empty list — the framework will retain its previously
-            // stored API records and will NOT treat them as new on the next run (provided
-            // isAPIUpdated handles null existingReferenceArtifact safely, which it does below).
             try {
                 credentials.refreshIfExpired();
             } catch (Exception e) {
@@ -241,15 +224,6 @@ ApigeeFederatedAPIDiscovery implements FederatedAPIDiscovery {
         return retrievedAPIs;
     }
 
-    /**
-     * Compares two reference artifact strings to determine whether the remote
-     * API proxy has changed since the last sync.
-     * <p>
-     * A null {@code existingReferenceArtifact} means the framework has no prior record
-     * for this API (e.g. first discovery, or state lost after a restart). Returning
-     * {@code true} here causes an update/re-import rather than a fresh create, which
-     * prevents the framework from appending the gateway name to avoid context collisions.
-     */
     @Override
     public boolean isAPIUpdated(String existingReferenceArtifact, String newReferenceArtifact) {
         if (existingReferenceArtifact == null) {

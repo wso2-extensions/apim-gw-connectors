@@ -80,7 +80,7 @@
     </build>
 
     <dependencies>
-        <!-- WSO2 APIM APIs -->
+       
         <dependency>
             <groupId>org.wso2.carbon.apimgt</groupId>
             <artifactId>org.wso2.carbon.apimgt.impl</artifactId>
@@ -92,7 +92,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- ✅ PROVIDED via Orbit dropins -->
         <dependency>
             <groupId>com.google.auth</groupId>
             <artifactId>google-auth-library-oauth2-http</artifactId>
@@ -112,7 +111,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- ✅ PROVIDED via Orbit dropins — opencensus-api 0.31.1.wso2v3 -->
         <dependency>
             <groupId>io.opencensus</groupId>
             <artifactId>opencensus-api</artifactId>
@@ -120,7 +118,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- ✅ PROVIDED — already active in runtime -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>

@@ -38,15 +38,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * OSGi component that provides the Apigee Gateway configuration to WSO2 APIM.
- * <p>
- * When this bundle is activated the SCR runtime will register an instance of
- * {@link GatewayAgentConfiguration} which causes the APIM Admin UI to display
- * <strong>"Apigee Gateway"</strong> in the external-gateway type dropdown and
- * to present the three connection fields (organization, environment,
- * service-account JSON).
- */
 @Component(
         name = "apigee.external.gateway.configuration.component",
         immediate = true,
@@ -58,7 +49,6 @@ public class ApigeeGatewayConfiguration implements GatewayAgentConfiguration {
 
     @Override
     public String getImplementation() {
-        // Deprecated method - returns null as deployment is not supported
         return null;
     }
 
