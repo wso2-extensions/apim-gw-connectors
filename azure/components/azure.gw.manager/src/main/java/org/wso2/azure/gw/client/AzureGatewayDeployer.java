@@ -143,6 +143,8 @@ public class AzureGatewayDeployer implements GatewayDeployer {
         GatewayAPIValidationResult result = new GatewayAPIValidationResult();
         List<String> errorList = new ArrayList<>();
 
+        // Check for API Name
+        errorList.add(GatewayUtil.validateAzureAPIName(api.getId().getName()));
         errorList.add(GatewayUtil.validateAzureAPIEndpoint(GatewayUtil.getEndpointURL(api)));
         errorList.add(GatewayUtil.validateAzureAPIContextTemplate(api.getContextTemplate()));
 

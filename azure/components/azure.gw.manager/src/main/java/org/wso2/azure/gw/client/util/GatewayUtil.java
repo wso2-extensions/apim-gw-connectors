@@ -84,6 +84,13 @@ public class GatewayUtil {
         }
     }
 
+    public static String validateAzureAPIName(String apiName) {
+        if (!apiName.matches("^[a-zA-Z0-9]+$")) {
+            return "API Name can only contain alphanumeric characters.";
+        }
+        return null;
+    }
+
     /**
      * Validates the Azure API endpoint URL.
      *
