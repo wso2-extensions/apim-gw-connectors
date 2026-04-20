@@ -26,8 +26,9 @@ import org.wso2.azure.gw.client.AzureConstants;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
 
-import java.net.MalformedURLException;
-import java.net.URL;
+
+import java.net.URISyntaxException;
+import java.net.URI;
 import java.util.regex.Pattern;
 
 /**
@@ -102,26 +103,26 @@ public class GatewayUtil {
             if (StringUtils.isEmpty(urlString)) {
                 return null;
             }
-            URL url = new URL(urlString);
+            URI uri = new URI(urlString);
 
             // Validate scheme (only http and https are allowed)
-            String protocol = url.getProtocol();
-            if (!"http".equalsIgnoreCase(protocol) && !"https".equalsIgnoreCase(protocol)) {
+            String protocol = uri.getScheme();
+            if (!AzureConstants.AZURE_PROTOCOL_HTTP.equalsIgnoreCase(protocol) && !AzureConstants.AZURE_PROTOCOL_HTTPS.equalsIgnoreCase(protocol) && !AzureConstants.AZURE_PROTOCOL_WS.equalsIgnoreCase(protocol) && !AzureConstants.AZURE_PROTOCOL_WSS.equalsIgnoreCase(protocol)) {
                 return "Invalid Endpoint URL";
             }
 
             // Validate host
-            if (url.getHost() == null || url.getHost().isEmpty()
-                    || url.getHost().equalsIgnoreCase("localhost")) {
+            if (uri.getHost() == null || uri.getHost().isEmpty()
+                    || uri.getHost().equalsIgnoreCase("localhost")) {
                 return "Invalid Endpoint URL";
             }
 
             // Validate path (no illegal characters)
-            if (!VALID_PATH_PATTERN.matcher(url.getPath()).matches()) {
+            if (!VALID_PATH_PATTERN.matcher(uri.getPath()).matches() && uri.getPath() != null) {
                 return "Invalid Endpoint URL";
             }
             return null;
-        } catch (MalformedURLException e) {
+        } catch (URISyntaxException | IllegalArgumentException e) {
             return "Invalid Endpoint URL";
         }
     }
