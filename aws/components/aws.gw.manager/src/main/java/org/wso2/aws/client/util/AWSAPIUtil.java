@@ -43,6 +43,7 @@ import software.amazon.awssdk.services.apigateway.model.DeleteDeploymentRequest;
 import software.amazon.awssdk.services.apigateway.model.DeleteRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.DeleteStageRequest;
 import software.amazon.awssdk.services.apigateway.model.Deployment;
+import software.amazon.awssdk.services.apigateway.model.NotFoundException;
 import software.amazon.awssdk.services.apigateway.model.GetAuthorizersRequest;
 import software.amazon.awssdk.services.apigateway.model.GetDeploymentsRequest;
 import software.amazon.awssdk.services.apigateway.model.GetDeploymentsResponse;
@@ -515,25 +516,43 @@ public class AWSAPIUtil {
     public static void deleteDeployment(String referenceArtifact, ApiGatewayClient apiGatewayClient, String stage)
             throws APIManagementException {
         String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(referenceArtifact);
-        GetStagesRequest getStagesRequest = GetStagesRequest.builder().restApiId(awsApiId).build();
-        GetStagesResponse getStagesResponse = apiGatewayClient.getStages(getStagesRequest);
-        if (getStagesResponse.item() != null && !getStagesResponse.item().isEmpty()) {
-            // Delete the stage before deleting the deployment
-            DeleteStageRequest deleteStageRequest = DeleteStageRequest.builder()
-                    .restApiId(awsApiId)
-                    .stageName(stage)
-                    .build();
-            apiGatewayClient.deleteStage(deleteStageRequest);
-
-            GetDeploymentsRequest getDeploymentsRequest = GetDeploymentsRequest.builder().restApiId(awsApiId).build();
-            GetDeploymentsResponse getDeploymentsResponse = apiGatewayClient.getDeployments(getDeploymentsRequest);
-            List<Deployment> deployments = getDeploymentsResponse.items();
-            for (Deployment deployment : deployments) {
-                DeleteDeploymentRequest deleteDeploymentRequest = DeleteDeploymentRequest.builder()
-                        .deploymentId(deployment.id())
+        try {
+            GetStagesRequest getStagesRequest = GetStagesRequest.builder().restApiId(awsApiId).build();
+            GetStagesResponse getStagesResponse = apiGatewayClient.getStages(getStagesRequest);
+            if (getStagesResponse.item() != null && !getStagesResponse.item().isEmpty()) {
+                // Delete the stage before deleting the deployment
+                DeleteStageRequest deleteStageRequest = DeleteStageRequest.builder()
                         .restApiId(awsApiId)
+                        .stageName(stage)
                         .build();
-                apiGatewayClient.deleteDeployment(deleteDeploymentRequest);
+                try {
+                    apiGatewayClient.deleteStage(deleteStageRequest);
+                } catch (NotFoundException e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Stage " + stage + " not found for API " + awsApiId + ". It may have been already deleted.");
+                    }
+                }
+
+                GetDeploymentsRequest getDeploymentsRequest = GetDeploymentsRequest.builder().restApiId(awsApiId).build();
+                GetDeploymentsResponse getDeploymentsResponse = apiGatewayClient.getDeployments(getDeploymentsRequest);
+                List<Deployment> deployments = getDeploymentsResponse.items();
+                for (Deployment deployment : deployments) {
+                    DeleteDeploymentRequest deleteDeploymentRequest = DeleteDeploymentRequest.builder()
+                            .deploymentId(deployment.id())
+                            .restApiId(awsApiId)
+                            .build();
+                    try {
+                        apiGatewayClient.deleteDeployment(deleteDeploymentRequest);
+                    } catch (NotFoundException e) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Deployment " + deployment.id() + " not found for API " + awsApiId + ". It may have been already deleted.");
+                        }
+                    }
+                }
+            }
+        } catch (NotFoundException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("API " + awsApiId + " not found in AWS API Gateway. It may have been already deleted.");
             }
         }
     }
@@ -694,10 +713,16 @@ public class AWSAPIUtil {
     public static void deleteAPI(String externalReference, ApiGatewayClient apiGatewayClient)
             throws APIManagementException {
         String referenceArtifact = GatewayUtil.getAWSApiIdFromReferenceArtifact(externalReference);
-        GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(referenceArtifact).build();
-        GetRestApiResponse restApi = apiGatewayClient.getRestApi(getRestApiRequest);
-        if (restApi != null) {
-            apiGatewayClient.deleteRestApi(DeleteRestApiRequest.builder().restApiId(referenceArtifact).build());
+        try {
+            GetRestApiRequest getRestApiRequest = GetRestApiRequest.builder().restApiId(referenceArtifact).build();
+            GetRestApiResponse restApi = apiGatewayClient.getRestApi(getRestApiRequest);
+            if (restApi != null) {
+                apiGatewayClient.deleteRestApi(DeleteRestApiRequest.builder().restApiId(referenceArtifact).build());
+            }
+        } catch (NotFoundException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("API " + referenceArtifact + " not found in AWS API Gateway. It may have been already deleted.");
+            }
         }
     }
 }
