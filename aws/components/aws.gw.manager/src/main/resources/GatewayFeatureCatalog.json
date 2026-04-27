@@ -8,7 +8,8 @@
       "runtime": [
         "transportsHTTP",
         "transportsHTTPS",
-        "oauth2"
+        "oauth2",
+        "apikey"
       ],
       "resources": [],
       "localScopes": [],
@@ -16,7 +17,9 @@
         "policies"
       ],
       "monetization": [],
-      "subscriptions": [],
+      "subscriptions": [
+        "subscriptions"
+      ],
       "endpoints": [
         "http",
         "typePRODUCTION"

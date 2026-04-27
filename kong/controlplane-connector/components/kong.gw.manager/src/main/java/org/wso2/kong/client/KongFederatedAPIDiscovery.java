@@ -235,6 +235,17 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             }
                         }
                     }
+
+                    String apiKeyHeader = resolveKeyAuthHeader(plugins);
+                    boolean apiKeyEnabled = apiKeyHeader != null;
+                    if (apiKeyEnabled) {
+                        api.setApiSecurity(KongConstants.KONG_API_SECURITY_API_KEY);
+                        api.setApiKeyHeader(apiKeyHeader);
+                        if (api.getSwaggerDefinition() != null) {
+                            api.setSwaggerDefinition(KongAPIUtil.applyApiKeySecurityToOas(
+                                    api.getSwaggerDefinition(), apiKeyHeader));
+                        }
+                    }
                     if (selectedAPILevelRateLimitPolicy != null) {
                         api.setApiLevelPolicy(selectedAPILevelRateLimitPolicy);
                     }
@@ -328,6 +339,15 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             }
                         }
                     }
+
+                    String apiKeyHeader = resolveKeyAuthHeader(plugins);
+                    boolean apiKeyEnabled = apiKeyHeader != null;
+                    if (apiKeyEnabled) {
+                        api.setApiSecurity(KongConstants.KONG_API_SECURITY_API_KEY);
+                        api.setApiKeyHeader(apiKeyHeader);
+                        api.setSwaggerDefinition(KongAPIUtil.applyApiKeySecurityToOas(api.getSwaggerDefinition(),
+                                apiKeyHeader));
+                    }
                     if (selectedAPILevelRateLimitPolicy != null) {
                         api.setApiLevelPolicy(selectedAPILevelRateLimitPolicy);
                     }
@@ -354,4 +374,21 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
     public boolean isAPIUpdated(String existingReferenceArtifact, String newReferenceArtifact) {
         return !java.util.Objects.equals(existingReferenceArtifact, newReferenceArtifact);
     }
+
+    private String resolveKeyAuthHeader(List<KongPlugin> plugins) {
+        if (plugins == null) {
+            return null;
+        }
+        for (KongPlugin plugin : plugins) {
+            if (plugin == null || plugin.getName() == null) {
+                continue;
+            }
+            if (KongConstants.KONG_KEY_AUTH_PLUGIN_TYPE.equals(plugin.getName())
+                    && !Boolean.FALSE.equals(plugin.getEnabled())) {
+                return KongAPIUtil.resolveApiKeyHeader(plugin);
+            }
+        }
+        return null;
+    }
+
 }

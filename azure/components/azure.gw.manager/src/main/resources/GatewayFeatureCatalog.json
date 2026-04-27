@@ -3,7 +3,7 @@
     "apiTypes": ["rest"],
     "gatewayFeatures": {
       "basic": [],
-      "runtime": ["cors", "transportsHTTP", "transportsHTTPS"],
+      "runtime": ["cors", "transportsHTTP", "transportsHTTPS", "apikey"],
       "resources": [],
       "localScopes": [],
       "policies": ["policies"],
