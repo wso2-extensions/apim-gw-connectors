@@ -128,12 +128,14 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
     public void validateEnvironment(Environment environment) throws APIManagementException {
         Map<String, String> additionalProperties = environment.getAdditionalProperties();
         if (additionalProperties == null) {
+            log.warn("AWS gateway validation failed due to missing additional properties.");
             throw new APIManagementException(INCOMPLETE_AWS_CONFIGURATION);
         }
         String region = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_REGION);
         String accessKey = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_ACCESS_KEY);
         String secretKey = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_SECRET_KEY);
         if (StringUtils.isAnyBlank(region, accessKey, secretKey)) {
+            log.warn("AWS gateway validation failed due to incomplete required connection properties.");
             throw new APIManagementException(INCOMPLETE_AWS_CONFIGURATION);
         }
         try {
@@ -148,6 +150,7 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
                 validatePlanMappings(environment, client);
             }
         } catch (SdkException e) {
+            log.error("AWS gateway validation failed while contacting AWS API Gateway.", e);
             throw new APIManagementException(INVALID_AWS_CONFIGURATION, e);
         }
     }
@@ -210,6 +213,7 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
             try {
                 client.getUsagePlan(GetUsagePlanRequest.builder().usagePlanId(usagePlanId).build());
             } catch (SdkException e) {
+                log.error("AWS plan mapping validation failed for usage plan ID: " + usagePlanId, e);
                 throw new APIManagementException(INVALID_AWS_PLAN_MAPPING_CONFIGURATION, e);
             }
         }

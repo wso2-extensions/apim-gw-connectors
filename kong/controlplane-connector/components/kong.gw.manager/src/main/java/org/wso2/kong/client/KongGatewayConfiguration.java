@@ -29,6 +29,8 @@ import feign.gson.GsonDecoder;
 import feign.gson.GsonEncoder;
 import feign.slf4j.Slf4jLogger;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.osgi.service.component.annotations.Component;
@@ -68,6 +70,7 @@ import java.util.Set;
         service = GatewayAgentConfiguration.class
 )
 public class KongGatewayConfiguration implements GatewayAgentConfiguration {
+    private static final Log log = LogFactory.getLog(KongGatewayConfiguration.class);
     private static final String INCOMPLETE_KONG_CONFIGURATION =
             "The gateway configuration you added is incomplete. Provide the required Kong gateway details.";
     private static final String INVALID_KONG_CONFIGURATION =
@@ -142,6 +145,7 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
     public void validateEnvironment(Environment environment) throws APIManagementException {
         Map<String, String> additionalProperties = environment.getAdditionalProperties();
         if (additionalProperties == null) {
+            log.warn("Kong gateway validation failed due to missing additional properties.");
             throw new APIManagementException(INCOMPLETE_KONG_CONFIGURATION);
         }
         String deploymentType = additionalProperties.get(KongConstants.KONG_DEPLOYMENT_TYPE);
@@ -152,6 +156,7 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
         String controlPlaneId = additionalProperties.get(KongConstants.KONG_CONTROL_PLANE_ID);
         String authToken = additionalProperties.get(KongConstants.KONG_AUTH_TOKEN);
         if (StringUtils.isAnyBlank(adminUrl, controlPlaneId, authToken)) {
+            log.warn("Kong gateway validation failed due to incomplete required connection properties.");
             throw new APIManagementException(INCOMPLETE_KONG_CONFIGURATION);
         }
         try (CloseableHttpClient httpClient = HttpClients.custom().build()) {
@@ -167,11 +172,17 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
                     .target(KongKonnectApi.class, adminUrl);
             apiGatewayClient.listServices(controlPlaneId, 1);
             validatePlanMappings(environment, apiGatewayClient, controlPlaneId);
+        } catch (APIManagementException e) {
+            log.error("Kong gateway validation failed with a domain validation error: " + e.getMessage(), e);
+            throw e;
         } catch (KongGatewayException e) {
+            log.error("Kong gateway validation failed while contacting Kong.", e);
             throw new APIManagementException(INVALID_KONG_CONFIGURATION, e);
         } catch (FeignException e) {
+            log.error("Kong gateway validation failed with an HTTP client error.", e);
             throw new APIManagementException(INVALID_KONG_CONFIGURATION, e);
         } catch (Exception e) {
+            log.error("Kong gateway validation failed with an unexpected error.", e);
             throw new APIManagementException(INVALID_KONG_CONFIGURATION, e);
         }
     }
@@ -228,9 +239,11 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
             response = apiGatewayClient.listConsumerGroups(controlPlaneId,
                     KongConstants.DEFAULT_CONSUMER_GROUP_LIST_LIMIT);
         } catch (Exception e) {
+            log.error("Kong gateway plan mapping validation failed while listing consumer groups.", e);
             throw new APIManagementException(INVALID_KONG_PLAN_MAPPING_CONFIGURATION, e);
         }
         if (response == null || response.getData() == null) {
+            log.warn("Kong gateway plan mapping validation failed due to empty consumer group response.");
             throw new APIManagementException(INVALID_KONG_PLAN_MAPPING_CONFIGURATION);
         }
         for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
@@ -242,6 +255,7 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
                 continue;
             }
             if (!consumerGroupExists(response.getData(), consumerGroupId)) {
+                log.warn("Kong gateway plan mapping validation failed. Invalid consumer group ID: " + consumerGroupId);
                 throw new APIManagementException(INVALID_KONG_PLAN_MAPPING_CONFIGURATION);
             }
         }
