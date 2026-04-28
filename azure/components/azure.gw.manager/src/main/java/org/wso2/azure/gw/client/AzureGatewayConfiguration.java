@@ -18,16 +18,27 @@
 
 package org.wso2.azure.gw.client;
 
+import com.azure.core.credential.TokenCredential;
+import com.azure.core.exception.AzureException;
+import com.azure.core.http.HttpClient;
+import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
+import com.azure.core.management.AzureEnvironment;
+import com.azure.core.management.profile.AzureProfile;
+import com.azure.identity.ClientSecretCredentialBuilder;
+import com.azure.resourcemanager.apimanagement.ApiManagementManager;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.osgi.service.component.annotations.Component;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.ConfigurationDto;
+import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
+import org.wso2.carbon.apimgt.api.model.GatewayConfigurationContext;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
 
 import java.io.InputStream;
@@ -36,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -48,6 +60,10 @@ import java.util.List;
 )
 public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
     private static final Log log = LogFactory.getLog(AzureGatewayConfiguration.class);
+    private static final String INCOMPLETE_AZURE_CONFIGURATION =
+            "The gateway configuration you added is incomplete. Provide the required Azure gateway details.";
+    private static final String INVALID_AZURE_CONFIGURATION =
+            "The Azure gateway configuration you added is invalid. Verify the credentials and service details.";
 
     /**
      * Returns the Deployer classname.
@@ -68,6 +84,11 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
     @Override
     public String getDiscoveryImplementation() {
         return AzureFederatedAPIDiscovery.class.getName();
+    }
+
+    @Override
+    public String getApiKeyConnectorImplementation() {
+        return AzureFederatedApiKeyConnector.class.getName();
     }
 
     /**
@@ -98,6 +119,58 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
                 Collections.emptyList(), false));
 
         return configurationDtoList;
+    }
+
+    /**
+     * Azure does not expose connector-owned mapping configuration.
+     */
+    public List<ConfigurationDto> getConnectionConfigurations(GatewayConfigurationContext context) {
+        return getConnectionConfigurations();
+    }
+
+    public void validateEnvironment(Environment environment) throws APIManagementException {
+        Map<String, String> additionalProperties = environment.getAdditionalProperties();
+        if (additionalProperties == null) {
+            log.warn("Azure gateway validation failed due to missing additional properties.");
+            throw new APIManagementException(INCOMPLETE_AZURE_CONFIGURATION);
+        }
+        String tenantId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_TENANT_ID);
+        String clientId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_CLIENT_ID);
+        String clientSecret = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_CLIENT_SECRET);
+        String subscriptionId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_SUBSCRIPTION_ID);
+        String resourceGroup = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_RESOURCE_GROUP);
+        String serviceName = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_SERVICE_NAME);
+        if (StringUtils.isAnyBlank(tenantId, clientId, clientSecret, subscriptionId, resourceGroup, serviceName)) {
+            log.warn("Azure gateway validation failed due to incomplete required connection properties.");
+            throw new APIManagementException(INCOMPLETE_AZURE_CONFIGURATION);
+        }
+        try {
+            HttpClient httpClient = new NettyAsyncHttpClientBuilder().build();
+            TokenCredential credential = new ClientSecretCredentialBuilder()
+                    .httpClient(httpClient)
+                    .tenantId(tenantId)
+                    .clientId(clientId)
+                    .clientSecret(clientSecret)
+                    .authorityHost(AzureEnvironment.AZURE.getActiveDirectoryEndpoint())
+                    .build();
+            AzureProfile profile = new AzureProfile(tenantId, subscriptionId, AzureEnvironment.AZURE);
+            ApiManagementManager manager = ApiManagementManager.configure().withHttpClient(httpClient)
+                    .authenticate(credential, profile);
+            if (manager.serviceClient().getApiManagementServices().getByResourceGroup(resourceGroup, serviceName)
+                    == null) {
+                log.warn("Azure gateway validation failed. API Management service not found for provided details.");
+                throw new APIManagementException(INVALID_AZURE_CONFIGURATION);
+            }
+        } catch (AzureException e) {
+            log.error("Azure gateway validation failed while contacting Azure API Management.", e);
+            throw new APIManagementException(INVALID_AZURE_CONFIGURATION, e);
+        } catch (APIManagementException e) {
+            log.error("Azure gateway validation failed with a domain validation error: " + e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            log.error("Azure gateway validation failed with an unexpected error.", e);
+            throw new APIManagementException(INVALID_AZURE_CONFIGURATION, e);
+        }
     }
 
     /**

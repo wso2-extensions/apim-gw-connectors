@@ -29,7 +29,7 @@ public class AWSConstants {
     // Environment related constants
     public static final String AWS_ENVIRONMENT_REGION = "region";
     public static final String AWS_ENVIRONMENT_ACCESS_KEY = "access_key";
-    public static final String AWS_ENVIRONMENT_SECRET_KEY = "secret_key";
+        public static final String AWS_ENVIRONMENT_SECRET_KEY = "secret_key";
     public static final String AWS_API_STAGE = "stage";
 
     // Authorizer related constants
@@ -39,6 +39,8 @@ public class AWSConstants {
     public static final String OPERATION_POLICY_API = "API";
     public static final String OPEN_API_VERSION = "oas30";
     public static final String JSON_PAYLOAD_TYPE = "application/json";
+    public static final String API_KEY_SECURITY = "api_key";
+    public static final String AWS_API_KEY_HEADER = "x-api-key";
 
     public static final String PRODUCTION_ENDPOINTS = "production_endpoints";
     public static final String SANDBOX_ENDPOINTS = "sandbox_endpoints";
