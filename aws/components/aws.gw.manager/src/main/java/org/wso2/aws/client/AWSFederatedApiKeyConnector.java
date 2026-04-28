@@ -28,7 +28,6 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
 import org.wso2.carbon.apimgt.api.model.FederatedApiKeyCreationResult;
 import org.wso2.carbon.apimgt.api.model.Environment;
-import org.wso2.carbon.apimgt.api.model.FederatedApiKeyContext;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.SdkHttpClient;
@@ -68,6 +67,14 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
     private static final String TAG_PERMITTED_REFERER = "wso2:key-permitted-referer";
     private static final String USAGE_PLAN_KEY_TYPE_API_KEY = "API_KEY";
     private static final String PLAN_MAPPING_PROPERTY_PREFIX = "plan_mapping.";
+
+    public static final String PROP_API_KEY_NAME = "apiKeyName";
+    public static final String PROP_API_UUID = "apiUuid";
+    public static final String PROP_AUTHZ_USER = "authzUser";
+    public static final String PROP_ORGANIZATION_ID = "organizationId";
+    public static final String PROP_VALIDITY_PERIOD = "validityPeriod";
+    public static final String PROP_PERMITTED_IP = "permittedIP";
+    public static final String PROP_PERMITTED_REFERER = "permittedReferer";
 
     private ApiGatewayClient apiGatewayClient;
     private String environmentId;
@@ -117,13 +124,15 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Creates an AWS API key using the caller-provided local API-key value and returns the AWS API key ID.
      */
     @Override
-    public FederatedApiKeyCreationResult createApiKey(FederatedApiKeyContext context) throws APIManagementException {
-        if (StringUtils.isBlank(context.getApiKeyValue())) {
+    public FederatedApiKeyCreationResult createApiKey(String apiKeyUuid, String apiKeyValue, String apiReferenceArtifact,
+                                                      String localPolicyId, Map<String, String> properties)
+            throws APIManagementException {
+        if (StringUtils.isBlank(apiKeyValue)) {
             throw new APIManagementException("API key value is required to create AWS API key");
         }
         try {
-            String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(context.getApiReferenceArtifact());
-            CreateApiKeyRequest request = buildCreateApiKeyRequest(context, awsApiId, null);
+            String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(apiReferenceArtifact);
+            CreateApiKeyRequest request = buildCreateApiKeyRequest(apiKeyUuid, apiKeyValue, awsApiId, null, properties);
             CreateApiKeyResponse response = apiGatewayClient.createApiKey(request);
             
             return FederatedApiKeyCreationResult.builder()
@@ -138,14 +147,19 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Replaces an AWS API key by creating a new key, migrating the mapped usage-plan association, and deleting the old
      * key. AWS API Gateway does not support patching an API key's value in place.
      */
-    public FederatedApiKeyCreationResult replaceApiKey(FederatedApiKeyContext context) throws APIManagementException {
-        if (context == null || StringUtils.isBlank(context.getApiKeyValue())) {
+    @Override
+    public FederatedApiKeyCreationResult replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue,
+                                                       String apiReferenceArtifact, String localPolicyId,
+                                                       Map<String, String> properties) throws APIManagementException {
+        if (StringUtils.isBlank(newApiKeyValue)) {
             throw new APIManagementException("API key value is required to replace AWS API key");
         }
-        String oldApiKeyId = resolveApiKeyId(context);
+        String oldApiKeyId = resolveApiKeyId(apiKeyReferenceArtifact);
         GetApiKeyResponse oldApiKey = getExistingApiKey(oldApiKeyId);
-        String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(context.getApiReferenceArtifact());
-        CreateApiKeyRequest request = buildCreateApiKeyRequest(context, awsApiId, oldApiKey);
+        String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(apiReferenceArtifact);
+        String apiKeyUuid = properties != null ? properties.get(PROP_API_UUID) : null;
+        CreateApiKeyRequest request = buildCreateApiKeyRequest(apiKeyUuid, newApiKeyValue, awsApiId, oldApiKey,
+                properties);
         CreateApiKeyResponse response;
         try {
             response = apiGatewayClient.createApiKey(request);
@@ -158,38 +172,35 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
         if (result == null || StringUtils.isBlank(result.getReferenceArtifact())) {
             throw new APIManagementException("AWS API key replacement did not return a reference artifact");
         }
-        FederatedApiKeyContext newKeyContext = copyContextWithApiKeyReferenceArtifact(context,
-                result.getReferenceArtifact());
+        String newApiKeyRefArtifact = result.getReferenceArtifact();
         try {
-            String remotePolicyReference = resolveRemotePolicyReference(context, false);
+            String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, false);
             if (StringUtils.isNotBlank(remotePolicyReference)) {
-                applyResolvedRateLimitPolicy(newKeyContext, remotePolicyReference);
+                applyResolvedRateLimitPolicy(newApiKeyRefArtifact, remotePolicyReference);
             }
         } catch (APIManagementException e) {
-            revokeApiKey(newKeyContext);
+            revokeApiKey(newApiKeyRefArtifact);
             throw e;
         }
-        revokeApiKey(context);
+        revokeApiKey(apiKeyReferenceArtifact);
         return result;
     }
 
-    private CreateApiKeyRequest buildCreateApiKeyRequest(FederatedApiKeyContext context, String awsApiId,
-                                                         GetApiKeyResponse oldApiKey) {
-
+    private CreateApiKeyRequest buildCreateApiKeyRequest(String apiKeyUuid, String apiKeyValue, String awsApiId,
+                                                         GetApiKeyResponse oldApiKey, Map<String, String> properties) {
         Map<String, String> tags = oldApiKey != null && oldApiKey.hasTags()
                 ? new HashMap<>(oldApiKey.tags()) : new HashMap<>();
-        tags.putAll(buildTags(context, awsApiId));
+        tags.putAll(buildTags(apiKeyUuid, awsApiId, properties));
         return CreateApiKeyRequest.builder()
-                .name(resolveApiKeyName(context, oldApiKey))
-                .value(context.getApiKeyValue())
+                .name(resolveApiKeyName(apiKeyUuid, oldApiKey, properties))
+                .value(apiKeyValue)
                 .enabled(oldApiKey != null && oldApiKey.enabled() != null ? oldApiKey.enabled() : true)
-                .description(resolveApiKeyDescription(context, oldApiKey))
+                .description(resolveApiKeyDescription(apiKeyUuid, oldApiKey))
                 .tags(tags)
                 .build();
     }
 
     private GetApiKeyResponse getExistingApiKey(String apiKeyId) throws APIManagementException {
-
         if (StringUtils.isBlank(apiKeyId)) {
             return null;
         }
@@ -209,32 +220,30 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
         }
     }
 
-    private String resolveApiKeyName(FederatedApiKeyContext context, GetApiKeyResponse oldApiKey) {
-
-        if (context != null && StringUtils.isNotBlank(context.getApiKeyName())) {
-            return context.getApiKeyName();
+    private String resolveApiKeyName(String apiKeyUuid, GetApiKeyResponse oldApiKey, Map<String, String> properties) {
+        String apiKeyName = properties != null ? properties.get(PROP_API_KEY_NAME) : null;
+        if (StringUtils.isNotBlank(apiKeyName)) {
+            return apiKeyName;
         }
         if (oldApiKey != null && StringUtils.isNotBlank(oldApiKey.name())) {
             return oldApiKey.name();
         }
-        return context != null && StringUtils.isNotBlank(context.getApiKeyUuid())
-                ? "wso2-key-" + context.getApiKeyUuid() : "wso2-key";
+        return StringUtils.isNotBlank(apiKeyUuid) ? "wso2-key-" + apiKeyUuid : "wso2-key";
     }
 
-    private String resolveApiKeyDescription(FederatedApiKeyContext context, GetApiKeyResponse oldApiKey) {
-
+    private String resolveApiKeyDescription(String apiKeyUuid, GetApiKeyResponse oldApiKey) {
         if (oldApiKey != null && StringUtils.isNotBlank(oldApiKey.description())) {
             return oldApiKey.description();
         }
-        return "WSO2 API Key UUID: " + (context != null ? context.getApiKeyUuid() : "");
+        return "WSO2 API Key UUID: " + StringUtils.defaultString(apiKeyUuid, "");
     }
 
     /**
      * Deletes the AWS API key identified by the stored connector-owned reference artifact.
      */
     @Override
-    public void revokeApiKey(FederatedApiKeyContext context) throws APIManagementException {
-        String apiKeyId = resolveApiKeyId(context);
+    public void revokeApiKey(String apiKeyReferenceArtifact) throws APIManagementException {
+        String apiKeyId = resolveApiKeyId(apiKeyReferenceArtifact);
         if (StringUtils.isBlank(apiKeyId)) {
             return;
         }
@@ -252,17 +261,18 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Associates the AWS API key with the usage plan encoded in the connector-owned remote plan reference.
      */
     @Override
-    public void applyRateLimitPolicy(FederatedApiKeyContext context) throws APIManagementException {
-        String remotePolicyReference = resolveRemotePolicyReference(context, true);
+    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact, String localPolicyId)
+            throws APIManagementException {
+        String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
             return;
         }
-        applyResolvedRateLimitPolicy(context, remotePolicyReference);
+        applyResolvedRateLimitPolicy(apiKeyReferenceArtifact, remotePolicyReference);
     }
 
-    private void applyResolvedRateLimitPolicy(FederatedApiKeyContext context, String remotePolicyReference)
+    private void applyResolvedRateLimitPolicy(String apiKeyReferenceArtifact, String remotePolicyReference)
             throws APIManagementException {
-        String apiKeyId = resolveApiKeyId(context);
+        String apiKeyId = resolveApiKeyId(apiKeyReferenceArtifact);
         if (StringUtils.isBlank(apiKeyId)) {
             throw new APIManagementException("Remote API key ID is required for rate limit policy association");
         }
@@ -290,12 +300,13 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Removes the AWS API key from the usage plan encoded in the connector-owned remote plan reference.
      */
     @Override
-    public void removeRateLimitPolicy(FederatedApiKeyContext context) throws APIManagementException {
-        String remotePolicyReference = resolveRemotePolicyReference(context, true);
+    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact, String localPolicyId)
+            throws APIManagementException {
+        String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
             return;
         }
-        String apiKeyId = resolveApiKeyId(context);
+        String apiKeyId = resolveApiKeyId(apiKeyReferenceArtifact);
         if (StringUtils.isBlank(apiKeyId)) {
             return;
         }
@@ -318,40 +329,19 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
         }
     }
 
-    private FederatedApiKeyContext copyContextWithApiKeyReferenceArtifact(FederatedApiKeyContext context,
-                                                                          String apiKeyReferenceArtifact) {
-        return FederatedApiKeyContext.builder()
-                .apiUuid(context.getApiUuid())
-                .apiName(context.getApiName())
-                .apiReferenceArtifact(context.getApiReferenceArtifact())
-                .apiKeyUuid(context.getApiKeyUuid())
-                .apiKeyName(context.getApiKeyName())
-                .apiKeyValue(context.getApiKeyValue())
-                .apiKeyReferenceArtifact(apiKeyReferenceArtifact)
-                .localPolicyId(context.getLocalPolicyId())
-                .authzUser(context.getAuthzUser())
-                .applicationUuid(context.getApplicationUuid())
-                .organizationId(context.getOrganizationId())
-                .environmentId(context.getEnvironmentId())
-                .validityPeriod(context.getValidityPeriod())
-                .permittedIP(context.getPermittedIP())
-                .permittedReferer(context.getPermittedReferer())
-                .build();
-    }
-
     private String buildApiKeyReferenceArtifact(String apiKeyId) {
         com.google.gson.JsonObject referenceArtifact = new com.google.gson.JsonObject();
         referenceArtifact.addProperty(API_KEY_ID, apiKeyId);
         return referenceArtifact.toString();
     }
 
-    private String resolveApiKeyId(FederatedApiKeyContext context) throws APIManagementException {
-        if (context == null || StringUtils.isBlank(context.getApiKeyReferenceArtifact())) {
+    private String resolveApiKeyId(String apiKeyReferenceArtifact) throws APIManagementException {
+        if (StringUtils.isBlank(apiKeyReferenceArtifact)) {
             return null;
         }
         try {
             com.google.gson.JsonObject referenceArtifact = com.google.gson.JsonParser
-                    .parseString(context.getApiKeyReferenceArtifact()).getAsJsonObject();
+                    .parseString(apiKeyReferenceArtifact).getAsJsonObject();
             if (!referenceArtifact.has(API_KEY_ID) || referenceArtifact.get(API_KEY_ID).isJsonNull()
                     || StringUtils.isBlank(referenceArtifact.get(API_KEY_ID).getAsString())) {
                 throw new APIManagementException("AWS API key reference artifact must contain apiKeyId");
@@ -371,12 +361,11 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
         return StringUtils.trimToNull(remotePolicyReference);
     }
 
-    private String resolveRemotePolicyReference(FederatedApiKeyContext context, boolean requireLocalPolicy)
+    private String resolveRemotePolicyReference(String localPolicyId, boolean requireLocalPolicy)
             throws APIManagementException {
         if (planMappings.isEmpty()) {
             return null;
         }
-        String localPolicyId = context != null ? context.getLocalPolicyId() : null;
         if (StringUtils.isBlank(localPolicyId)) {
             if (requireLocalPolicy) {
                 throw new APIManagementException("Local subscription policy is required for external plan mapping");
@@ -399,18 +388,19 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
     /**
      * Builds AWS tags that keep enough WSO2 context on the remote API key for traceability.
      */
-    private Map<String, String> buildTags(FederatedApiKeyContext context, String awsApiId) {
+    private Map<String, String> buildTags(String apiKeyUuid, String awsApiId, Map<String, String> properties) {
         Map<String, String> tags = new HashMap<>();
         putTag(tags, TAG_API_ID, awsApiId);
-        putTag(tags, TAG_API_UUID, context.getApiUuid());
-        putTag(tags, TAG_KEY_UUID, context.getApiKeyUuid());
-        putTag(tags, TAG_AUTHZ_USER, context.getAuthzUser());
-        putTag(tags, TAG_ORGANIZATION, context.getOrganizationId());
-        if (context.getValidityPeriod() != null) {
-            putTag(tags, TAG_VALIDITY_PERIOD, String.valueOf(context.getValidityPeriod()));
+        putTag(tags, TAG_API_UUID, properties != null ? properties.get(PROP_API_UUID) : null);
+        putTag(tags, TAG_KEY_UUID, apiKeyUuid);
+        putTag(tags, TAG_AUTHZ_USER, properties != null ? properties.get(PROP_AUTHZ_USER) : null);
+        putTag(tags, TAG_ORGANIZATION, properties != null ? properties.get(PROP_ORGANIZATION_ID) : null);
+        String validityPeriod = properties != null ? properties.get(PROP_VALIDITY_PERIOD) : null;
+        if (StringUtils.isNotBlank(validityPeriod)) {
+            putTag(tags, TAG_VALIDITY_PERIOD, validityPeriod);
         }
-        putTag(tags, TAG_PERMITTED_IP, context.getPermittedIP());
-        putTag(tags, TAG_PERMITTED_REFERER, context.getPermittedReferer());
+        putTag(tags, TAG_PERMITTED_IP, properties != null ? properties.get(PROP_PERMITTED_IP) : null);
+        putTag(tags, TAG_PERMITTED_REFERER, properties != null ? properties.get(PROP_PERMITTED_REFERER) : null);
         return tags;
     }
 
