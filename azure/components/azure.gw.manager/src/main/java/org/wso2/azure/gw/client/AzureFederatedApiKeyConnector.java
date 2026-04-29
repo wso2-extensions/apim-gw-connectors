@@ -36,7 +36,6 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
 import org.wso2.carbon.apimgt.api.model.Environment;
-import org.wso2.carbon.apimgt.api.model.FederatedApiKeyCreationResult;
 
 import java.util.Map;
 
@@ -96,9 +95,9 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Creates an Azure APIM subscription scoped to the referenced API and returns the subscription name.
      */
     @Override
-    public FederatedApiKeyCreationResult createApiKey(String apiKeyUuid, String apiKeyValue,
-                                                      String apiReferenceArtifact, String localPolicyId,
-                                                      Map<String, String> properties)
+    public String createApiKey(String apiKeyUuid, String apiKeyValue,
+                               String apiReferenceArtifact, String localPolicyId,
+                               Map<String, String> properties)
             throws APIManagementException {
         if (StringUtils.isBlank(apiReferenceArtifact) || StringUtils.isBlank(apiKeyValue)) {
             throw new APIManagementException("API reference artifact and API key value are required");
@@ -119,9 +118,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
             SubscriptionContract subscription = manager.subscriptions()
                     .createOrUpdate(resourceGroup, serviceName, subscriptionName, parameters);
 
-            return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(subscription.name(), externalApiId))
-                    .build();
+            return buildApiKeyReferenceArtifact(subscription.name(), externalApiId);
         } catch (Exception e) {
             throw new APIManagementException("Error creating API key in Azure", e);
         }
@@ -131,8 +128,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Replaces an Azure APIM subscription key in place and returns the retained subscription name.
      */
     @Override
-    public FederatedApiKeyCreationResult replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue,
-                                                       String localPolicyId, Map<String, String> properties)
+    public String replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue, Map<String, String> properties)
             throws APIManagementException {
         if (StringUtils.isBlank(newApiKeyValue)) {
             throw new APIManagementException("API key value is required");
@@ -154,9 +150,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
             SubscriptionContract subscription = manager.subscriptions()
                     .createOrUpdate(resourceGroup, serviceName, subscriptionName, parameters);
 
-            return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(subscription.name(), externalApiId))
-                    .build();
+            return buildApiKeyReferenceArtifact(subscription.name(), externalApiId);
         } catch (Exception e) {
             throw new APIManagementException("Error replacing API key in Azure", e);
         }
@@ -182,7 +176,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * No-op because Azure models the API-key scope on the subscription itself, not as a separate plan association.
      */
     @Override
-    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId) {
+    public void associateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyId) {
         if (log.isDebugEnabled()) {
             log.debug("Skipping rate-limit policy association for Azure API-bound key");
         }
@@ -192,7 +186,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * No-op because Azure has no separate remote plan association to remove for API-bound subscriptions.
      */
     @Override
-    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId) {
+    public void dissociateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyId) {
         if (log.isDebugEnabled()) {
             log.debug("Skipping rate-limit policy dissociation for Azure API-bound key");
         }

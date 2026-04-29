@@ -33,7 +33,6 @@ import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.FederatedApiKeyConnector;
 import org.wso2.carbon.apimgt.api.model.Environment;
-import org.wso2.carbon.apimgt.api.model.FederatedApiKeyCreationResult;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
 import org.wso2.kong.client.model.KongAcl;
 import org.wso2.kong.client.model.KongConsumer;
@@ -124,9 +123,9 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Creates a Kong consumer, key-auth credential, and API ACL group for the local API-key value.
      */
     @Override
-    public FederatedApiKeyCreationResult createApiKey(String apiKeyUuid, String apiKeyValue,
-                                                      String apiReferenceArtifact,
-                                                      String localPolicyId, Map<String, String> properties)
+    public String createApiKey(String apiKeyUuid, String apiKeyValue,
+                               String apiReferenceArtifact,
+                               String localPolicyId, Map<String, String> properties)
             throws APIManagementException {
         if (StringUtils.isAnyBlank(apiKeyUuid, apiKeyValue)) {
             throw new APIManagementException("API key UUID and value are required");
@@ -159,9 +158,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             }
             apiGatewayClient.createAcl(controlPlaneId, consumerId, new KongAcl(buildApiAclGroup(remoteApiId)));
             
-            return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(consumerId, remoteApiId))
-                    .build();
+            return buildApiKeyReferenceArtifact(consumerId, remoteApiId);
         } catch (KongGatewayException e) {
             if (e.getStatusCode() == HTTP_CONFLICT) {
                 throw new APIManagementException("Kong consumer already exists for key UUID: " + apiKeyUuid, e);
@@ -178,8 +175,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Replaces the key-auth credential on the existing Kong consumer and keeps consumer-level ACL/group associations.
      */
     @Override
-    public FederatedApiKeyCreationResult replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue,
-                                                       String localPolicyId, Map<String, String> properties)
+    public String replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue, Map<String, String> properties)
             throws APIManagementException {
         if (StringUtils.isBlank(newApiKeyValue)) {
             throw new APIManagementException("API key value is required to replace Kong API key");
@@ -205,9 +201,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
                 throw new APIManagementException("Failed to create replacement Kong key-auth credential");
             }
             deleteOldKeyAuthCredentials(consumerId, existingCredentials, replacement.getId());
-            return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(consumerId, remoteApiId))
-                    .build();
+            return buildApiKeyReferenceArtifact(consumerId, remoteApiId);
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {
@@ -239,7 +233,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Adds ACL and consumer-group associations for the mapped remote consumer group.
      */
     @Override
-    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId)
+    public void associateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyId)
             throws APIManagementException {
         String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
@@ -274,7 +268,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Removes ACL and consumer-group associations for the mapped remote consumer group.
      */
     @Override
-    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId)
+    public void dissociateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyId)
             throws APIManagementException {
         String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
