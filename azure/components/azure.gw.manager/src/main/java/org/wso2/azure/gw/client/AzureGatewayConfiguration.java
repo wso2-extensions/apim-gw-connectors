@@ -38,7 +38,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.ConfigurationDto;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
-import org.wso2.carbon.apimgt.api.model.GatewayConfigurationContext;
+import org.wso2.carbon.apimgt.api.model.GatewayEnvironmentValidationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
 
 import java.io.InputStream;
@@ -120,19 +120,13 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
 
         return configurationDtoList;
     }
-
-    /**
-     * Azure does not expose connector-owned mapping configuration.
-     */
-    public List<ConfigurationDto> getConnectionConfigurations(GatewayConfigurationContext context) {
-        return getConnectionConfigurations();
-    }
-
-    public void validateEnvironment(Environment environment) throws APIManagementException {
+    public GatewayEnvironmentValidationResult validateEnvironment(Environment environment) {
+        List<String> errors = new ArrayList<>();
         Map<String, String> additionalProperties = environment.getAdditionalProperties();
         if (additionalProperties == null) {
             log.warn("Azure gateway validation failed due to missing additional properties.");
-            throw new APIManagementException(INCOMPLETE_AZURE_CONFIGURATION);
+            errors.add(INCOMPLETE_AZURE_CONFIGURATION);
+            return buildValidationResult(errors);
         }
         String tenantId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_TENANT_ID);
         String clientId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_CLIENT_ID);
@@ -142,7 +136,8 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
         String serviceName = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_SERVICE_NAME);
         if (StringUtils.isAnyBlank(tenantId, clientId, clientSecret, subscriptionId, resourceGroup, serviceName)) {
             log.warn("Azure gateway validation failed due to incomplete required connection properties.");
-            throw new APIManagementException(INCOMPLETE_AZURE_CONFIGURATION);
+            errors.add(INCOMPLETE_AZURE_CONFIGURATION);
+            return buildValidationResult(errors);
         }
         try {
             HttpClient httpClient = new NettyAsyncHttpClientBuilder().build();
@@ -159,18 +154,23 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
             if (manager.serviceClient().getApiManagementServices().getByResourceGroup(resourceGroup, serviceName)
                     == null) {
                 log.warn("Azure gateway validation failed. API Management service not found for provided details.");
-                throw new APIManagementException(INVALID_AZURE_CONFIGURATION);
+                errors.add(INVALID_AZURE_CONFIGURATION);
             }
         } catch (AzureException e) {
             log.error("Azure gateway validation failed while contacting Azure API Management.", e);
-            throw new APIManagementException(INVALID_AZURE_CONFIGURATION, e);
-        } catch (APIManagementException e) {
-            log.error("Azure gateway validation failed with a domain validation error: " + e.getMessage(), e);
-            throw e;
+            errors.add(INVALID_AZURE_CONFIGURATION);
         } catch (Exception e) {
             log.error("Azure gateway validation failed with an unexpected error.", e);
-            throw new APIManagementException(INVALID_AZURE_CONFIGURATION, e);
+            errors.add(INVALID_AZURE_CONFIGURATION);
         }
+        return buildValidationResult(errors);
+    }
+
+    private GatewayEnvironmentValidationResult buildValidationResult(List<String> errors) {
+        GatewayEnvironmentValidationResult validationResult = new GatewayEnvironmentValidationResult();
+        validationResult.setValid(errors.isEmpty());
+        validationResult.setErrors(errors);
+        return validationResult;
     }
 
     /**

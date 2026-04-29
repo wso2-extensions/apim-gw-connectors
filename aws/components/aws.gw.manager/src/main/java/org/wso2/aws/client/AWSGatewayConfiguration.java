@@ -31,7 +31,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.ConfigurationDto;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
-import org.wso2.carbon.apimgt.api.model.GatewayConfigurationContext;
+import org.wso2.carbon.apimgt.api.model.GatewayEnvironmentValidationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
 import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
 import org.wso2.carbon.apimgt.api.model.policy.SubscriptionPolicy;
@@ -119,24 +119,27 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         return configurationDtoList;
     }
 
-    public List<ConfigurationDto> getConnectionConfigurations(GatewayConfigurationContext context) {
+    public List<ConfigurationDto> getConnectionConfigurations(List<SubscriptionPolicy> subscriptionPolicies) {
         List<ConfigurationDto> configurationDtoList = new ArrayList<>(getConnectionConfigurations());
-        configurationDtoList.add(buildPlanMappingConfiguration(context));
+        configurationDtoList.add(buildPlanMappingConfiguration(subscriptionPolicies));
         return configurationDtoList;
     }
 
-    public void validateEnvironment(Environment environment) throws APIManagementException {
+    public GatewayEnvironmentValidationResult validateEnvironment(Environment environment) {
+        List<String> errors = new ArrayList<>();
         Map<String, String> additionalProperties = environment.getAdditionalProperties();
         if (additionalProperties == null) {
             log.warn("AWS gateway validation failed due to missing additional properties.");
-            throw new APIManagementException(INCOMPLETE_AWS_CONFIGURATION);
+            errors.add(INCOMPLETE_AWS_CONFIGURATION);
+            return buildValidationResult(errors);
         }
         String region = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_REGION);
         String accessKey = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_ACCESS_KEY);
         String secretKey = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_SECRET_KEY);
         if (StringUtils.isAnyBlank(region, accessKey, secretKey)) {
             log.warn("AWS gateway validation failed due to incomplete required connection properties.");
-            throw new APIManagementException(INCOMPLETE_AWS_CONFIGURATION);
+            errors.add(INCOMPLETE_AWS_CONFIGURATION);
+            return buildValidationResult(errors);
         }
         try {
             try (SdkHttpClient httpClient = ApacheHttpClient.builder().build();
@@ -147,12 +150,13 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
                             AwsBasicCredentials.create(accessKey, secretKey)))
                     .build()) {
                 client.getRestApis(GetRestApisRequest.builder().limit(1).build());
-                validatePlanMappings(environment, client);
+                validatePlanMappings(environment, client, errors);
             }
         } catch (SdkException e) {
             log.error("AWS gateway validation failed while contacting AWS API Gateway.", e);
-            throw new APIManagementException(INVALID_AWS_CONFIGURATION, e);
+            errors.add(INVALID_AWS_CONFIGURATION);
         }
+        return buildValidationResult(errors);
     }
 
     @Override
@@ -198,7 +202,7 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         return AWSConstants.AWS_API_EXECUTION_URL_TEMPLATE;
     }
 
-    private void validatePlanMappings(Environment environment, ApiGatewayClient client) throws APIManagementException {
+    private void validatePlanMappings(Environment environment, ApiGatewayClient client, List<String> errors) {
         if (environment.getAdditionalProperties() == null) {
             return;
         }
@@ -214,29 +218,36 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
                 client.getUsagePlan(GetUsagePlanRequest.builder().usagePlanId(usagePlanId).build());
             } catch (SdkException e) {
                 log.error("AWS plan mapping validation failed for usage plan ID: " + usagePlanId, e);
-                throw new APIManagementException(INVALID_AWS_PLAN_MAPPING_CONFIGURATION, e);
+                errors.add(INVALID_AWS_PLAN_MAPPING_CONFIGURATION);
             }
         }
     }
 
-    private ConfigurationDto buildPlanMappingConfiguration(GatewayConfigurationContext context) {
+    private GatewayEnvironmentValidationResult buildValidationResult(List<String> errors) {
+        GatewayEnvironmentValidationResult validationResult = new GatewayEnvironmentValidationResult();
+        validationResult.setValid(errors.isEmpty());
+        validationResult.setErrors(errors);
+        return validationResult;
+    }
+
+    private ConfigurationDto buildPlanMappingConfiguration(List<SubscriptionPolicy> subscriptionPolicies) {
         ConfigurationDto configuration = new ConfigurationDto(PLAN_MAPPING_CONFIG_NAME, "Plan Mapping", MAPPING_TYPE,
                 "Map local WSO2 plans to AWS usage plans.", "", false, false, Collections.emptyList(), false);
         Map<String, String> labels = new HashMap<>();
         labels.put(LEFT_LABEL_KEY, "WSO2 Plan");
         labels.put(RIGHT_LABEL_KEY, "Usage Plan ID");
         configuration.setLabels(labels);
-        configuration.setValues(buildPlanMappingValues(context));
+        configuration.setValues(buildPlanMappingValues(subscriptionPolicies));
         return configuration;
     }
 
-    private List<Object> buildPlanMappingValues(GatewayConfigurationContext context) {
+    private List<Object> buildPlanMappingValues(List<SubscriptionPolicy> subscriptionPolicies) {
         List<Object> values = new ArrayList<>();
-        if (context == null || context.getSubscriptionPolicies() == null) {
+        if (subscriptionPolicies == null) {
             return values;
         }
         Set<String> supportedApiTypes = resolveSupportedApiTypes();
-        for (SubscriptionPolicy policy : context.getSubscriptionPolicies()) {
+        for (SubscriptionPolicy policy : subscriptionPolicies) {
             if (policy == null || policy.getUUID() == null || policy.getPolicyName() == null) {
                 continue;
             }
