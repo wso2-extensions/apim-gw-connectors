@@ -57,6 +57,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     private static final int HTTP_CONFLICT = 409;
     private static final int MAX_TAG_LENGTH = 256;
     private static final String CONSUMER_ID = "consumerId";
+    private static final String REMOTE_API_ID = "remoteApiId";
     private static final String KONG_REFERENCE_UUID = "uuid";
     private static final String TAG_API_ID = "wso2:api-id";
     private static final String TAG_API_UUID = "wso2:api-uuid";
@@ -159,7 +160,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             apiGatewayClient.createAcl(controlPlaneId, consumerId, new KongAcl(buildApiAclGroup(remoteApiId)));
             
             return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(consumerId))
+                    .referenceArtifact(buildApiKeyReferenceArtifact(consumerId, remoteApiId))
                     .build();
         } catch (KongGatewayException e) {
             if (e.getStatusCode() == HTTP_CONFLICT) {
@@ -178,15 +179,14 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      */
     @Override
     public FederatedApiKeyCreationResult replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue,
-                                                       String apiReferenceArtifact, String localPolicyId,
-                                                       Map<String, String> properties) throws APIManagementException {
+                                                       String localPolicyId, Map<String, String> properties)
+            throws APIManagementException {
         if (StringUtils.isBlank(newApiKeyValue)) {
             throw new APIManagementException("API key value is required to replace Kong API key");
         }
         String consumerId = resolveConsumerId(apiKeyReferenceArtifact);
         if (StringUtils.isBlank(consumerId)) {
-            String apiKeyUuid = properties != null ? properties.get(PROP_API_UUID) : null;
-            return createApiKey(apiKeyUuid, newApiKeyValue, apiReferenceArtifact, localPolicyId, properties);
+            throw new APIManagementException("Kong API key reference artifact must contain consumerId");
         }
 
         List<KongKeyAuth> existingCredentials = listKeyAuthCredentials(consumerId);
@@ -197,7 +197,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             keyAuthRequest.setTtl(validityPeriod);
         }
         try {
-            String remoteApiId = resolveRemoteApiId(apiReferenceArtifact);
+            String remoteApiId = resolveApiKeyRemoteApiId(apiKeyReferenceArtifact);
             String apiKeyUuid = properties != null ? properties.get(PROP_API_UUID) : null;
             keyAuthRequest.setTags(buildMetadataTags(apiKeyUuid, remoteApiId, properties));
             KongKeyAuth replacement = createKeyAuthWithTagFallback(consumerId, keyAuthRequest);
@@ -206,7 +206,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             }
             deleteOldKeyAuthCredentials(consumerId, existingCredentials, replacement.getId());
             return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(consumerId))
+                    .referenceArtifact(buildApiKeyReferenceArtifact(consumerId, remoteApiId))
                     .build();
         } catch (APIManagementException e) {
             throw e;
@@ -239,7 +239,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Adds ACL and consumer-group associations for the mapped remote consumer group.
      */
     @Override
-    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact, String localPolicyId)
+    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId)
             throws APIManagementException {
         String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
@@ -255,7 +255,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
         }
 
         try {
-            String remoteApiId = resolveRemoteApiId(apiReferenceArtifact);
+            String remoteApiId = resolveApiKeyRemoteApiId(apiKeyReferenceArtifact);
             if (!consumerGroupExists(policyId)) {
                 throw new APIManagementException("Mapped Kong consumer group was not found: " + policyId);
             }
@@ -274,7 +274,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Removes ACL and consumer-group associations for the mapped remote consumer group.
      */
     @Override
-    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact, String localPolicyId)
+    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId)
             throws APIManagementException {
         String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
@@ -289,10 +289,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             throw new APIManagementException("Mapped remote consumer group ID is required for Kong dissociation");
         }
         try {
-            String remoteApiId = null;
-            if (StringUtils.isNotBlank(apiReferenceArtifact)) {
-                remoteApiId = resolveRemoteApiId(apiReferenceArtifact);
-            }
+            String remoteApiId = resolveApiKeyRemoteApiId(apiKeyReferenceArtifact);
             removeAclGroup(consumerId, buildPlanAclGroup(policyId));
             removeAclGroup(consumerId, buildSubscriptionAclGroup(remoteApiId, policyId));
             removeConsumerFromGroup(consumerId, policyId);
@@ -332,25 +329,35 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
                 + " in environment: " + environmentId);
     }
 
-    private String buildApiKeyReferenceArtifact(String consumerId) {
+    private String buildApiKeyReferenceArtifact(String consumerId, String remoteApiId) {
         JsonObject referenceArtifact = new JsonObject();
         referenceArtifact.addProperty(CONSUMER_ID, consumerId);
+        referenceArtifact.addProperty(REMOTE_API_ID, remoteApiId);
         return referenceArtifact.toString();
     }
 
     private String resolveConsumerId(String apiKeyReferenceArtifact) throws APIManagementException {
+        return resolveApiKeyReferenceField(apiKeyReferenceArtifact, CONSUMER_ID);
+    }
+
+    private String resolveApiKeyRemoteApiId(String apiKeyReferenceArtifact) throws APIManagementException {
+        return resolveApiKeyReferenceField(apiKeyReferenceArtifact, REMOTE_API_ID);
+    }
+
+    private String resolveApiKeyReferenceField(String apiKeyReferenceArtifact, String fieldName)
+            throws APIManagementException {
         if (StringUtils.isBlank(apiKeyReferenceArtifact)) {
             return null;
         }
         try {
             JsonObject referenceArtifact = JsonParser.parseString(apiKeyReferenceArtifact).getAsJsonObject();
-            if (referenceArtifact.has(CONSUMER_ID) && !referenceArtifact.get(CONSUMER_ID).isJsonNull()) {
-                String consumerId = referenceArtifact.get(CONSUMER_ID).getAsString();
-                if (StringUtils.isNotBlank(consumerId)) {
-                    return consumerId;
+            if (referenceArtifact.has(fieldName) && !referenceArtifact.get(fieldName).isJsonNull()) {
+                String value = referenceArtifact.get(fieldName).getAsString();
+                if (StringUtils.isNotBlank(value)) {
+                    return value;
                 }
             }
-            throw new APIManagementException("Kong API key reference artifact must contain consumerId");
+            throw new APIManagementException("Kong API key reference artifact must contain " + fieldName);
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {

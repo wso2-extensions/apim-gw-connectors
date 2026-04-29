@@ -120,7 +120,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
                     .createOrUpdate(resourceGroup, serviceName, subscriptionName, parameters);
 
             return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(subscription.name()))
+                    .referenceArtifact(buildApiKeyReferenceArtifact(subscription.name(), externalApiId))
                     .build();
         } catch (Exception e) {
             throw new APIManagementException("Error creating API key in Azure", e);
@@ -132,13 +132,13 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      */
     @Override
     public FederatedApiKeyCreationResult replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue,
-                                                       String apiReferenceArtifact, String localPolicyId,
-                                                       Map<String, String> properties) throws APIManagementException {
-        if (StringUtils.isBlank(apiReferenceArtifact) || StringUtils.isBlank(newApiKeyValue)) {
-            throw new APIManagementException("API reference artifact and API key value are required");
+                                                       String localPolicyId, Map<String, String> properties)
+            throws APIManagementException {
+        if (StringUtils.isBlank(newApiKeyValue)) {
+            throw new APIManagementException("API key value is required");
         }
         try {
-            String externalApiId = extractAzureApiIdFromReferenceArtifact(apiReferenceArtifact);
+            String externalApiId = resolveExternalApiId(apiKeyReferenceArtifact);
             String scope = buildApiScope(externalApiId);
             String subscriptionName = StringUtils.defaultIfBlank(resolveSubscriptionName(apiKeyReferenceArtifact),
                     generateSubscriptionName(null));
@@ -155,7 +155,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
                     .createOrUpdate(resourceGroup, serviceName, subscriptionName, parameters);
 
             return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(subscription.name()))
+                    .referenceArtifact(buildApiKeyReferenceArtifact(subscription.name(), externalApiId))
                     .build();
         } catch (Exception e) {
             throw new APIManagementException("Error replacing API key in Azure", e);
@@ -182,8 +182,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * No-op because Azure models the API-key scope on the subscription itself, not as a separate plan association.
      */
     @Override
-    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact,
-                                     String localPolicyId) {
+    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId) {
         if (log.isDebugEnabled()) {
             log.debug("Skipping rate-limit policy association for Azure API-bound key");
         }
@@ -193,8 +192,7 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * No-op because Azure has no separate remote plan association to remove for API-bound subscriptions.
      */
     @Override
-    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact,
-                                      String localPolicyId) {
+    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId) {
         if (log.isDebugEnabled()) {
             log.debug("Skipping rate-limit policy dissociation for Azure API-bound key");
         }
@@ -278,25 +276,35 @@ public class AzureFederatedApiKeyConnector implements FederatedApiKeyConnector {
         return "WSO2 API key";
     }
 
-    private String buildApiKeyReferenceArtifact(String subscriptionName) {
+    private String buildApiKeyReferenceArtifact(String subscriptionName, String externalApiId) {
         JsonObject referenceArtifact = new JsonObject();
         referenceArtifact.addProperty(SUBSCRIPTION_NAME, subscriptionName);
+        referenceArtifact.addProperty(AzureConstants.AZURE_EXTERNAL_REFERENCE_ID, externalApiId);
         return referenceArtifact.toString();
     }
 
     private String resolveSubscriptionName(String apiKeyReferenceArtifact) throws APIManagementException {
+        return resolveApiKeyReferenceField(apiKeyReferenceArtifact, SUBSCRIPTION_NAME);
+    }
+
+    private String resolveExternalApiId(String apiKeyReferenceArtifact) throws APIManagementException {
+        return resolveApiKeyReferenceField(apiKeyReferenceArtifact, AzureConstants.AZURE_EXTERNAL_REFERENCE_ID);
+    }
+
+    private String resolveApiKeyReferenceField(String apiKeyReferenceArtifact, String fieldName)
+            throws APIManagementException {
         if (StringUtils.isBlank(apiKeyReferenceArtifact)) {
             return null;
         }
         try {
             JsonObject referenceArtifact = JsonParser.parseString(apiKeyReferenceArtifact).getAsJsonObject();
-            if (referenceArtifact.has(SUBSCRIPTION_NAME) && !referenceArtifact.get(SUBSCRIPTION_NAME).isJsonNull()) {
-                String subscriptionName = referenceArtifact.get(SUBSCRIPTION_NAME).getAsString();
-                if (StringUtils.isNotBlank(subscriptionName)) {
-                    return subscriptionName;
+            if (referenceArtifact.has(fieldName) && !referenceArtifact.get(fieldName).isJsonNull()) {
+                String value = referenceArtifact.get(fieldName).getAsString();
+                if (StringUtils.isNotBlank(value)) {
+                    return value;
                 }
             }
-            throw new APIManagementException("Azure API key reference artifact must contain subscriptionName");
+            throw new APIManagementException("Azure API key reference artifact must contain " + fieldName);
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {

@@ -57,6 +57,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
     private static final Log log = LogFactory.getLog(AWSFederatedApiKeyConnector.class);
     private static final int MAX_TAG_LENGTH = 256;
     private static final String API_KEY_ID = "apiKeyId";
+    private static final String REMOTE_API_ID = "remoteApiId";
     private static final String TAG_API_ID = "wso2:api-id";
     private static final String TAG_API_UUID = "wso2:api-uuid";
     private static final String TAG_KEY_UUID = "wso2:key-uuid";
@@ -136,7 +137,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
             CreateApiKeyResponse response = apiGatewayClient.createApiKey(request);
             
             return FederatedApiKeyCreationResult.builder()
-                    .referenceArtifact(buildApiKeyReferenceArtifact(response.id()))
+                    .referenceArtifact(buildApiKeyReferenceArtifact(response.id(), awsApiId))
                     .build();
         } catch (Exception e) {
             throw new APIManagementException("Error creating API key in AWS", e);
@@ -149,14 +150,14 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      */
     @Override
     public FederatedApiKeyCreationResult replaceApiKey(String apiKeyReferenceArtifact, String newApiKeyValue,
-                                                       String apiReferenceArtifact, String localPolicyId,
-                                                       Map<String, String> properties) throws APIManagementException {
+                                                       String localPolicyId, Map<String, String> properties)
+            throws APIManagementException {
         if (StringUtils.isBlank(newApiKeyValue)) {
             throw new APIManagementException("API key value is required to replace AWS API key");
         }
         String oldApiKeyId = resolveApiKeyId(apiKeyReferenceArtifact);
         GetApiKeyResponse oldApiKey = getExistingApiKey(oldApiKeyId);
-        String awsApiId = GatewayUtil.getAWSApiIdFromReferenceArtifact(apiReferenceArtifact);
+        String awsApiId = resolveRemoteApiId(apiKeyReferenceArtifact);
         String apiKeyUuid = properties != null ? properties.get(PROP_API_UUID) : null;
         CreateApiKeyRequest request = buildCreateApiKeyRequest(apiKeyUuid, newApiKeyValue, awsApiId, oldApiKey,
                 properties);
@@ -167,7 +168,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
             throw new APIManagementException("Error creating replacement API key in AWS", e);
         }
         FederatedApiKeyCreationResult result = FederatedApiKeyCreationResult.builder()
-                .referenceArtifact(buildApiKeyReferenceArtifact(response.id()))
+                .referenceArtifact(buildApiKeyReferenceArtifact(response.id(), awsApiId))
                 .build();
         if (result == null || StringUtils.isBlank(result.getReferenceArtifact())) {
             throw new APIManagementException("AWS API key replacement did not return a reference artifact");
@@ -261,7 +262,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Associates the AWS API key with the usage plan encoded in the connector-owned remote plan reference.
      */
     @Override
-    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact, String localPolicyId)
+    public void applyRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId)
             throws APIManagementException {
         String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
@@ -300,7 +301,7 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
      * Removes the AWS API key from the usage plan encoded in the connector-owned remote plan reference.
      */
     @Override
-    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String apiReferenceArtifact, String localPolicyId)
+    public void removeRateLimitPolicy(String apiKeyReferenceArtifact, String localPolicyId)
             throws APIManagementException {
         String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
@@ -329,24 +330,34 @@ public class AWSFederatedApiKeyConnector implements FederatedApiKeyConnector {
         }
     }
 
-    private String buildApiKeyReferenceArtifact(String apiKeyId) {
+    private String buildApiKeyReferenceArtifact(String apiKeyId, String remoteApiId) {
         com.google.gson.JsonObject referenceArtifact = new com.google.gson.JsonObject();
         referenceArtifact.addProperty(API_KEY_ID, apiKeyId);
+        referenceArtifact.addProperty(REMOTE_API_ID, remoteApiId);
         return referenceArtifact.toString();
     }
 
     private String resolveApiKeyId(String apiKeyReferenceArtifact) throws APIManagementException {
+        return resolveApiKeyReferenceField(apiKeyReferenceArtifact, API_KEY_ID);
+    }
+
+    private String resolveRemoteApiId(String apiKeyReferenceArtifact) throws APIManagementException {
+        return resolveApiKeyReferenceField(apiKeyReferenceArtifact, REMOTE_API_ID);
+    }
+
+    private String resolveApiKeyReferenceField(String apiKeyReferenceArtifact, String fieldName)
+            throws APIManagementException {
         if (StringUtils.isBlank(apiKeyReferenceArtifact)) {
             return null;
         }
         try {
             com.google.gson.JsonObject referenceArtifact = com.google.gson.JsonParser
                     .parseString(apiKeyReferenceArtifact).getAsJsonObject();
-            if (!referenceArtifact.has(API_KEY_ID) || referenceArtifact.get(API_KEY_ID).isJsonNull()
-                    || StringUtils.isBlank(referenceArtifact.get(API_KEY_ID).getAsString())) {
-                throw new APIManagementException("AWS API key reference artifact must contain apiKeyId");
+            if (!referenceArtifact.has(fieldName) || referenceArtifact.get(fieldName).isJsonNull()
+                    || StringUtils.isBlank(referenceArtifact.get(fieldName).getAsString())) {
+                throw new APIManagementException("AWS API key reference artifact must contain " + fieldName);
             }
-            return referenceArtifact.get(API_KEY_ID).getAsString();
+            return referenceArtifact.get(fieldName).getAsString();
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {
