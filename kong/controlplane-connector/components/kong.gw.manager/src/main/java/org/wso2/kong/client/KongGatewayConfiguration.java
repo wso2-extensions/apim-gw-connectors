@@ -22,12 +22,30 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import feign.Feign;
+import feign.FeignException;
+import feign.RequestInterceptor;
+import feign.gson.GsonDecoder;
+import feign.gson.GsonEncoder;
+import feign.slf4j.Slf4jLogger;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.osgi.service.component.annotations.Component;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.ConfigurationDto;
+import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
+import org.wso2.carbon.apimgt.api.model.GatewayEnvironmentValidationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayMode;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
+import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
+import org.wso2.carbon.apimgt.api.model.policy.SubscriptionPolicy;
+import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
+import org.wso2.kong.client.model.KongConsumerGroup;
+import org.wso2.kong.client.model.PagedResponse;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -35,7 +53,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -47,6 +70,20 @@ import java.util.List;
         service = GatewayAgentConfiguration.class
 )
 public class KongGatewayConfiguration implements GatewayAgentConfiguration {
+    private static final Log log = LogFactory.getLog(KongGatewayConfiguration.class);
+    private static final String INCOMPLETE_KONG_CONFIGURATION =
+            "The gateway configuration you added is incomplete. Provide the required Kong gateway details.";
+    private static final String INVALID_KONG_CONFIGURATION =
+            "The Kong gateway configuration you added is invalid. Verify the admin URL, control plane ID,"
+    + " and access token.";
+    private static final String INVALID_KONG_PLAN_MAPPING_CONFIGURATION =
+            "The Kong consumer group assignments you added are invalid. Verify the Kong consumer group IDs.";
+    private static final String PLAN_MAPPING_CONFIG_NAME = "plan_mapping";
+    private static final String MAPPING_TYPE = "mapping";
+    private static final String LEFT_LABEL_KEY = "left";
+    private static final String RIGHT_LABEL_KEY = "right";
+    private static final Set<String> NON_MAPPABLE_POLICIES = new HashSet<>(
+            Arrays.asList("Unauthenticated", "DefaultSubscriptionless", "AsyncDefaultSubscriptionless"));
 
     @Override
     public String getGatewayDeployerImplementation() {
@@ -61,6 +98,11 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
 
     public String getDiscoveryImplementation() {
         return KongFederatedAPIDiscovery.class.getName();
+    }
+
+    @Override
+    public String getApiKeyConnectorImplementation() {
+        return KongFederatedApiKeyConnector.class.getName();
     }
 
     @Override
@@ -92,6 +134,59 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
                 new ConfigurationDto(KongConstants.KONG_DEPLOYMENT_TYPE, "Deployment Type", "options",
                         "Select the Kong Gateway deployment type", KongConstants.KONG_STANDALONE_DEPLOYMENT, true,
                         false, deploymentValues, false));
+    }
+
+    public List<ConfigurationDto> getConnectionConfigurations(List<SubscriptionPolicy> subscriptionPolicies) {
+        List<ConfigurationDto> configurationDtos = new ArrayList<>(getConnectionConfigurations());
+        configurationDtos.add(buildPlanMappingConfiguration(subscriptionPolicies));
+        return configurationDtos;
+    }
+
+    public GatewayEnvironmentValidationResult validateEnvironment(Environment environment) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String description = null;
+        Map<String, String> additionalProperties = environment.getAdditionalProperties();
+        if (additionalProperties == null) {
+            log.warn("Kong gateway validation failed due to missing additional properties.");
+            description = INCOMPLETE_KONG_CONFIGURATION;
+            return buildValidationResult(errors, description);
+        }
+        String deploymentType = additionalProperties.get(KongConstants.KONG_DEPLOYMENT_TYPE);
+        if (KongConstants.KONG_KUBERNETES_DEPLOYMENT.equals(deploymentType)) {
+            return buildValidationResult(errors, description);
+        }
+        String adminUrl = additionalProperties.get(KongConstants.KONG_ADMIN_URL);
+        String controlPlaneId = additionalProperties.get(KongConstants.KONG_CONTROL_PLANE_ID);
+        String authToken = additionalProperties.get(KongConstants.KONG_AUTH_TOKEN);
+        if (StringUtils.isAnyBlank(adminUrl, controlPlaneId, authToken)) {
+            log.warn("Kong gateway validation failed due to incomplete required connection properties.");
+            description = INCOMPLETE_KONG_CONFIGURATION;
+            return buildValidationResult(errors, description);
+        }
+        try (CloseableHttpClient httpClient = HttpClients.custom().build()) {
+            RequestInterceptor auth = template ->
+                    template.header(KongConstants.AUTHORIZATION_HEADER, KongConstants.BEARER_PREFIX + authToken);
+            KongKonnectApi apiGatewayClient = Feign.builder()
+                    .client(new ApacheFeignHttpClient(httpClient))
+                    .encoder(new GsonEncoder())
+                    .decoder(new GsonDecoder())
+                    .errorDecoder(new KongErrorDecoder())
+                    .logger(new Slf4jLogger(KongKonnectApi.class))
+                    .requestInterceptor(auth)
+                    .target(KongKonnectApi.class, adminUrl);
+            apiGatewayClient.listServices(controlPlaneId, 1);
+            description = validatePlanMappings(environment, apiGatewayClient, controlPlaneId, errors);
+        } catch (KongGatewayException e) {
+            log.error("Kong gateway validation failed while contacting Kong.", e);
+            description = INVALID_KONG_CONFIGURATION;
+        } catch (FeignException e) {
+            log.error("Kong gateway validation failed with an HTTP client error.", e);
+            description = INVALID_KONG_CONFIGURATION;
+        } catch (Exception e) {
+            log.error("Kong gateway validation failed with an unexpected error.", e);
+            description = INVALID_KONG_CONFIGURATION;
+        }
+        return buildValidationResult(errors, description);
     }
 
     @Override
@@ -136,7 +231,128 @@ public class KongGatewayConfiguration implements GatewayAgentConfiguration {
         return "";
     }
 
+    private String validatePlanMappings(Environment environment, KongKonnectApi apiGatewayClient, String controlPlaneId,
+            Map<String, String> errors) {
+        if (environment.getAdditionalProperties() == null) {
+            return null;
+        }
+        PagedResponse<KongConsumerGroup> response;
+        try {
+            response = apiGatewayClient.listConsumerGroups(controlPlaneId,
+                    KongConstants.DEFAULT_CONSUMER_GROUP_LIST_LIMIT);
+        } catch (Exception e) {
+            log.error("Kong gateway plan mapping validation failed while listing consumer groups.", e);
+            return INVALID_KONG_PLAN_MAPPING_CONFIGURATION;
+        }
+        if (response == null || response.getData() == null) {
+            log.warn("Kong gateway plan mapping validation failed due to empty consumer group response.");
+            return INVALID_KONG_PLAN_MAPPING_CONFIGURATION;
+        }
+        for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
+            if (!StringUtils.startsWith(property.getKey(), "plan_mapping.")) {
+                continue;
+            }
+            String consumerGroupId = StringUtils.trimToNull(property.getValue());
+            if (consumerGroupId == null) {
+                continue;
+            }
+            if (!consumerGroupExists(response.getData(), consumerGroupId)) {
+                log.warn("Kong gateway plan mapping validation failed. Invalid consumer group ID: " + consumerGroupId);
+                errors.put(property.getKey(), "Invalid consumer group ID");
+            }
+        }
+        if (!errors.isEmpty()) {
+            return INVALID_KONG_PLAN_MAPPING_CONFIGURATION;
+        }
+        return null;
+    }
+
+    private GatewayEnvironmentValidationResult buildValidationResult(Map<String, String> errors, String description) {
+        GatewayEnvironmentValidationResult validationResult = new GatewayEnvironmentValidationResult();
+        validationResult.setValid(StringUtils.isBlank(description));
+        validationResult.setDescription(description);
+        validationResult.setErrors(errors);
+        return validationResult;
+    }
+
+    private boolean consumerGroupExists(List<KongConsumerGroup> groups, String consumerGroupId) {
+        for (KongConsumerGroup group : groups) {
+            if (group != null && StringUtils.equals(group.getId(), consumerGroupId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<String> getSupportedModes() {
         return Arrays.asList(GatewayMode.READ_ONLY.getMode());
+    }
+
+    private ConfigurationDto buildPlanMappingConfiguration(List<SubscriptionPolicy> subscriptionPolicies) {
+        ConfigurationDto configuration = new ConfigurationDto(PLAN_MAPPING_CONFIG_NAME,
+                "Kong Consumer Group Assignment", MAPPING_TYPE, "For each WSO2 subscription policy, enter the Kong "
+                        + "consumer group ID to apply when generating third-party API keys.", "",
+                false, false, Collections.emptyList(), false);
+        Map<String, String> labels = new HashMap<>();
+        labels.put(LEFT_LABEL_KEY, "WSO2 Subscription Policy");
+        labels.put(RIGHT_LABEL_KEY, "Kong Consumer Group ID");
+        configuration.setLabels(labels);
+        configuration.setValues(buildPlanMappingValues(subscriptionPolicies));
+        return configuration;
+    }
+
+    private List<Object> buildPlanMappingValues(List<SubscriptionPolicy> subscriptionPolicies) {
+        List<Object> values = new ArrayList<>();
+        if (subscriptionPolicies == null) {
+            return values;
+        }
+        Set<String> supportedApiTypes = resolveSupportedApiTypes();
+        for (SubscriptionPolicy policy : subscriptionPolicies) {
+            if (policy == null || policy.getUUID() == null || policy.getPolicyName() == null) {
+                continue;
+            }
+            if (NON_MAPPABLE_POLICIES.contains(policy.getPolicyName())) {
+                continue;
+            }
+            String apiType = resolvePolicyApiType(policy);
+            if (apiType == null || !supportedApiTypes.contains(apiType)) {
+                continue;
+            }
+            Map<String, String> value = new LinkedHashMap<>();
+            value.put("id", policy.getUUID());
+            value.put("label", policy.getDisplayName() != null ? policy.getDisplayName() : policy.getPolicyName());
+            value.put("apiType", apiType);
+            values.add(value);
+        }
+        return values;
+    }
+
+    private Set<String> resolveSupportedApiTypes() {
+        try {
+            GatewayPortalConfiguration configuration = getGatewayFeatureCatalog();
+            if (configuration != null && configuration.getSupportedAPITypes() != null) {
+                return new HashSet<>(configuration.getSupportedAPITypes());
+            }
+        } catch (APIManagementException e) {
+            return Collections.emptySet();
+        }
+        return Collections.emptySet();
+    }
+
+    private String resolvePolicyApiType(SubscriptionPolicy policy) {
+        if (policy.getDefaultQuotaPolicy() == null || policy.getDefaultQuotaPolicy().getType() == null) {
+            return null;
+        }
+        String type = policy.getDefaultQuotaPolicy().getType();
+        if (PolicyConstants.REQUEST_COUNT_TYPE.equalsIgnoreCase(type)) {
+            return "rest";
+        }
+        if (PolicyConstants.EVENT_COUNT_TYPE.equalsIgnoreCase(type)) {
+            return "async";
+        }
+        if (PolicyConstants.AI_API_QUOTA_TYPE.equalsIgnoreCase(type)) {
+            return "ai-api";
+        }
+        return null;
     }
 }

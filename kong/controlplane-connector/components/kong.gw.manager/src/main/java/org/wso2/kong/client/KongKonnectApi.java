@@ -25,6 +25,11 @@ import feign.RequestLine;
 import org.wso2.kong.client.model.KongAPI;
 import org.wso2.kong.client.model.KongAPIImplementation;
 import org.wso2.kong.client.model.KongAPISpec;
+import org.wso2.kong.client.model.KongAcl;
+import org.wso2.kong.client.model.KongConsumer;
+import org.wso2.kong.client.model.KongConsumerGroup;
+import org.wso2.kong.client.model.KongConsumerGroupMembership;
+import org.wso2.kong.client.model.KongKeyAuth;
 import org.wso2.kong.client.model.KongListResponse;
 import org.wso2.kong.client.model.KongPlugin;
 import org.wso2.kong.client.model.KongRoute;
@@ -79,5 +84,74 @@ public interface KongKonnectApi {
     PagedResponse<KongPlugin> listPluginsByServiceId(@Param("cpId") String controlPlaneId,
                                                      @Param("serviceId") String serviceId, @Param("size") int size)
             throws KongGatewayException;
+
+    // Consumer management
+
+    @RequestLine("POST /v2/control-planes/{cpId}/core-entities/consumers")
+    @Headers({"Accept: application/json", "Content-Type: application/json"})
+    KongConsumer createConsumer(@Param("cpId") String controlPlaneId, KongConsumer consumer)
+            throws KongGatewayException;
+
+    @RequestLine("GET /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}")
+    @Headers({"Accept: application/json"})
+    KongConsumer getConsumer(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId)
+            throws KongGatewayException;
+
+    @RequestLine("DELETE /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}")
+    @Headers({"Accept: application/json"})
+    void deleteConsumer(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId)
+            throws KongGatewayException;
+
+    // Key-auth credential management
+
+    @RequestLine("POST /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}/key-auth")
+    @Headers({"Accept: application/json", "Content-Type: application/json"})
+    KongKeyAuth createKeyAuth(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId,
+                              KongKeyAuth keyAuth) throws KongGatewayException;
+
+    @RequestLine("GET /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}/key-auth?size={size}")
+    @Headers({"Accept: application/json"})
+    PagedResponse<KongKeyAuth> listKeyAuth(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId,
+                                           @Param("size") int size) throws KongGatewayException;
+
+    @RequestLine("DELETE /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}/key-auth/{keyAuthId}")
+    @Headers({"Accept: application/json"})
+    void deleteKeyAuth(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId,
+                       @Param("keyAuthId") String keyAuthId) throws KongGatewayException;
+
+    // ACL management
+
+    @RequestLine("POST /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}/acls")
+    @Headers({"Accept: application/json", "Content-Type: application/json"})
+    KongAcl createAcl(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId,
+                      KongAcl acl) throws KongGatewayException;
+
+    @RequestLine("GET /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}/acls?size={size}")
+    @Headers({"Accept: application/json"})
+    PagedResponse<KongAcl> listConsumerAcls(@Param("cpId") String controlPlaneId,
+                                            @Param("consumerId") String consumerId,
+                                            @Param("size") int size) throws KongGatewayException;
+
+    @RequestLine("DELETE /v2/control-planes/{cpId}/core-entities/consumers/{consumerId}/acls/{aclId}")
+    @Headers({"Accept: application/json"})
+    void deleteConsumerAcl(@Param("cpId") String controlPlaneId, @Param("consumerId") String consumerId,
+                           @Param("aclId") String aclId) throws KongGatewayException;
+
+    // Consumer Group management
+
+    @RequestLine("GET /v2/control-planes/{cpId}/core-entities/consumer_groups?size={size}")
+    @Headers({"Accept: application/json"})
+    PagedResponse<KongConsumerGroup> listConsumerGroups(@Param("cpId") String controlPlaneId,
+                                                        @Param("size") int size) throws KongGatewayException;
+
+    @RequestLine("POST /v2/control-planes/{cpId}/core-entities/consumer_groups/{groupId}/consumers")
+    @Headers({"Accept: application/json", "Content-Type: application/json"})
+    void addConsumerToGroup(@Param("cpId") String controlPlaneId, @Param("groupId") String groupId,
+                            KongConsumerGroupMembership membership) throws KongGatewayException;
+
+    @RequestLine("DELETE /v2/control-planes/{cpId}/core-entities/consumer_groups/{groupId}/consumers/{consumerId}")
+    @Headers({"Accept: application/json"})
+    void removeConsumerFromGroup(@Param("cpId") String controlPlaneId, @Param("groupId") String groupId,
+                                 @Param("consumerId") String consumerId) throws KongGatewayException;
 
 }

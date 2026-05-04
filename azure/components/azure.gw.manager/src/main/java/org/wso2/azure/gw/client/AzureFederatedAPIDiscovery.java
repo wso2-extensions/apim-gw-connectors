@@ -33,6 +33,7 @@ import com.azure.resourcemanager.apimanagement.models.ApiContract;
 import com.azure.resourcemanager.apimanagement.models.ApiRevisionContract;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.azure.gw.client.util.AzureAPIUtil;
@@ -125,6 +126,10 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
                 // Get API
                 String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
                 API apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
+                if (Boolean.TRUE.equals(api.subscriptionRequired())) {
+                    apiArtifact.setApiSecurity(AzureConstants.AZURE_API_SECURITY_API_KEY);
+                    apiArtifact.setApiKeyHeader(resolveApiKeyHeader(api));
+                }
 
                 // Get current revision
                 PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions().listByService(resourceGroup,
@@ -163,6 +168,43 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
                 .get(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH).getAsLong();
         long newRevisionCreatedTime = newArtifact
                 .get(AzureConstants.AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH).getAsLong();
-        return existingRevisionCreatedTime != newRevisionCreatedTime;
+        if (existingRevisionCreatedTime != newRevisionCreatedTime) {
+            return true;
+        }
+
+        boolean existingApiKeyEnabled = readBoolean(existingArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED);
+        boolean newApiKeyEnabled = readBoolean(newArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED);
+        if (existingApiKeyEnabled != newApiKeyEnabled) {
+            return true;
+        }
+
+        String existingApiKeyHeader = readString(existingArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER);
+        String newApiKeyHeader = readString(newArtifact,
+                AzureConstants.AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER);
+        return !StringUtils.equals(existingApiKeyHeader, newApiKeyHeader);
+    }
+
+    private String resolveApiKeyHeader(ApiContract apiContract) {
+        if (apiContract != null && apiContract.subscriptionKeyParameterNames() != null) {
+            String headerName = apiContract.subscriptionKeyParameterNames().headerProperty();
+            if (StringUtils.isNotBlank(headerName)) {
+                return headerName;
+            }
+        }
+        return AzureConstants.AZURE_DEFAULT_SUBSCRIPTION_KEY_HEADER;
+    }
+
+    private boolean readBoolean(JsonObject object, String key) {
+        return object != null && object.has(key) && !object.get(key).isJsonNull() && object.get(key).getAsBoolean();
+    }
+
+    private String readString(JsonObject object, String key) {
+        if (object == null || !object.has(key) || object.get(key).isJsonNull()) {
+            return null;
+        }
+        return object.get(key).getAsString();
     }
 }
