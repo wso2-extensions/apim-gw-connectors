@@ -57,17 +57,6 @@ public class ApigeeOpenAPISpecBuilder {
     private static final Log log = LogFactory.getLog(ApigeeOpenAPISpecBuilder.class);
     private static final Gson GSON = new Gson();
 
-    // -----------------------------------------------------------------------
-    //  Note: Condition parsing is now handled by ApigeeConditionParser class
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    //  Container class for policy-extracted parameters
-    // -----------------------------------------------------------------------
-
-    /**
-     * Container class for extracted query and header parameters from Apigee policies.
-     */
     static class PolicyParameters {
         final Set<String> queryParams = new LinkedHashSet<>();
         final Set<String> headerParams = new LinkedHashSet<>();
