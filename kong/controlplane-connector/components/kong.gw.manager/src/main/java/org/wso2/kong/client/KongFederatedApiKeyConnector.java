@@ -306,20 +306,20 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
         }
         if (StringUtils.isBlank(localPolicyId)) {
             if (requireLocalPolicy) {
-                throw new APIManagementException("Local subscription policy is required for external plan mapping");
+                throw new APIManagementException("Local subscription policy is required for external plan assignment");
             }
             return null;
         }
         for (LocalPolicyRemoteMapping planMapping : planMappings) {
             if (StringUtils.equals(localPolicyId, planMapping.getLocalPolicyId())) {
                 if (StringUtils.isBlank(planMapping.getRemotePlanReference())) {
-                    throw new APIManagementException("External plan is not configured for local policy: "
+                    throw new APIManagementException("External plan assignment is not configured for local policy: "
                             + localPolicyId);
                 }
                 return planMapping.getRemotePlanReference();
             }
         }
-        throw new APIManagementException("No external plan mapping found for local policy: " + localPolicyId
+        throw new APIManagementException("No external plan assignment found for local policy: " + localPolicyId
                 + " in environment: " + environmentId);
     }
 

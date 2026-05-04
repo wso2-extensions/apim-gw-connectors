@@ -46,6 +46,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -121,12 +122,13 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
         return configurationDtoList;
     }
     public GatewayEnvironmentValidationResult validateEnvironment(Environment environment) {
-        List<String> errors = new ArrayList<>();
+        Map<String, String> errors = new LinkedHashMap<>();
+        String description = null;
         Map<String, String> additionalProperties = environment.getAdditionalProperties();
         if (additionalProperties == null) {
             log.warn("Azure gateway validation failed due to missing additional properties.");
-            errors.add(INCOMPLETE_AZURE_CONFIGURATION);
-            return buildValidationResult(errors);
+            description = INCOMPLETE_AZURE_CONFIGURATION;
+            return buildValidationResult(errors, description);
         }
         String tenantId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_TENANT_ID);
         String clientId = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_CLIENT_ID);
@@ -136,8 +138,8 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
         String serviceName = additionalProperties.get(AzureConstants.AZURE_ENVIRONMENT_SERVICE_NAME);
         if (StringUtils.isAnyBlank(tenantId, clientId, clientSecret, subscriptionId, resourceGroup, serviceName)) {
             log.warn("Azure gateway validation failed due to incomplete required connection properties.");
-            errors.add(INCOMPLETE_AZURE_CONFIGURATION);
-            return buildValidationResult(errors);
+            description = INCOMPLETE_AZURE_CONFIGURATION;
+            return buildValidationResult(errors, description);
         }
         try {
             HttpClient httpClient = new NettyAsyncHttpClientBuilder().build();
@@ -154,21 +156,22 @@ public class AzureGatewayConfiguration implements GatewayAgentConfiguration {
             if (manager.serviceClient().getApiManagementServices().getByResourceGroup(resourceGroup, serviceName)
                     == null) {
                 log.warn("Azure gateway validation failed. API Management service not found for provided details.");
-                errors.add(INVALID_AZURE_CONFIGURATION);
+                description = INVALID_AZURE_CONFIGURATION;
             }
         } catch (AzureException e) {
             log.error("Azure gateway validation failed while contacting Azure API Management.", e);
-            errors.add(INVALID_AZURE_CONFIGURATION);
+            description = INVALID_AZURE_CONFIGURATION;
         } catch (Exception e) {
             log.error("Azure gateway validation failed with an unexpected error.", e);
-            errors.add(INVALID_AZURE_CONFIGURATION);
+            description = INVALID_AZURE_CONFIGURATION;
         }
-        return buildValidationResult(errors);
+        return buildValidationResult(errors, description);
     }
 
-    private GatewayEnvironmentValidationResult buildValidationResult(List<String> errors) {
+    private GatewayEnvironmentValidationResult buildValidationResult(Map<String, String> errors, String description) {
         GatewayEnvironmentValidationResult validationResult = new GatewayEnvironmentValidationResult();
-        validationResult.setValid(errors.isEmpty());
+        validationResult.setValid(StringUtils.isBlank(description));
+        validationResult.setDescription(description);
         validationResult.setErrors(errors);
         return validationResult;
     }
