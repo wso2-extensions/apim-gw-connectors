@@ -24,29 +24,6 @@ import org.apache.commons.logging.LogFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Parses Apigee Proxy Endpoint condition expressions.
- * 
- * <p>Apigee uses a proprietary expression language inside {@code <Condition>} elements.
- * This is NOT XML - it's plain text that looks like:
- * <pre>
- *   (proxy.pathsuffix MatchesPath "/todos") and (request.verb = "GET")
- *   (proxy.pathsuffix MatchesPath "/users/*") and (request.verb equals "POST")
- *   request.verb == "DELETE" and proxy.pathsuffix MatchesPath "/items/*"
- * </pre>
- * 
- * <p>Since this is a custom expression language (not XML), we parse it using
- * pattern matching. An alternative would be to implement a full lexer/parser
- * using ANTLR or a recursive descent parser, but regex suffices for the
- * subset of expressions we need to extract (path and verb).
- * 
- * <p><b>Why not use an XML parser here?</b>
- * <ul>
- *   <li>The condition text is the <em>content</em> of an XML element, not XML itself</li>
- *   <li>We already use DOM parsing to extract the condition string from XML</li>
- *   <li>Once extracted, the string must be parsed as Apigee's expression syntax</li>
- * </ul>
- */
 public class ApigeeConditionParser {
 
     private static final Log log = LogFactory.getLog(ApigeeConditionParser.class);
@@ -248,18 +225,7 @@ public class ApigeeConditionParser {
     // -----------------------------------------------------------------------
     //  Utility: Convert Apigee path to OpenAPI path
     // -----------------------------------------------------------------------
-
-    /**
-     * Converts an Apigee wildcard path to OpenAPI path parameter format.
-     * 
-     * Examples:
-     *   /todos           becomes /todos          (no change)
-     *   /todos/*         becomes /todos/todoId   (wildcard to param)
-     *   /users/x/posts/* becomes /users/userId/posts/postId
-     * 
-     * @param apigeePath path from MatchesPath condition
-     * @return OpenAPI-compatible path with param placeholders
-     */
+    
     public static String toOpenAPIPath(String apigeePath) {
         if (apigeePath == null || apigeePath.isEmpty()) {
             return "/";
