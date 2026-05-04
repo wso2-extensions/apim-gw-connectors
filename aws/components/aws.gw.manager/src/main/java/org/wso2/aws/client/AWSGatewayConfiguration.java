@@ -73,7 +73,7 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
     private static final String INVALID_AWS_CONFIGURATION =
             "The AWS gateway configuration you added is invalid. Verify the region, access key, and secret key.";
     private static final String INVALID_AWS_PLAN_MAPPING_CONFIGURATION =
-            "The gateway plan mappings you added are invalid. Verify the AWS usage plan IDs.";
+            "The AWS usage plan assignments you added are invalid. Verify the AWS usage plan IDs.";
     private static final String PLAN_MAPPING_CONFIG_NAME = "plan_mapping";
     private static final String MAPPING_TYPE = "mapping";
     private static final String LEFT_LABEL_KEY = "left";
@@ -126,20 +126,21 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
     }
 
     public GatewayEnvironmentValidationResult validateEnvironment(Environment environment) {
-        List<String> errors = new ArrayList<>();
+        Map<String, String> errors = new LinkedHashMap<>();
+        String description = null;
         Map<String, String> additionalProperties = environment.getAdditionalProperties();
         if (additionalProperties == null) {
             log.warn("AWS gateway validation failed due to missing additional properties.");
-            errors.add(INCOMPLETE_AWS_CONFIGURATION);
-            return buildValidationResult(errors);
+            description = INCOMPLETE_AWS_CONFIGURATION;
+            return buildValidationResult(errors, description);
         }
         String region = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_REGION);
         String accessKey = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_ACCESS_KEY);
         String secretKey = additionalProperties.get(AWSConstants.AWS_ENVIRONMENT_SECRET_KEY);
         if (StringUtils.isAnyBlank(region, accessKey, secretKey)) {
             log.warn("AWS gateway validation failed due to incomplete required connection properties.");
-            errors.add(INCOMPLETE_AWS_CONFIGURATION);
-            return buildValidationResult(errors);
+            description = INCOMPLETE_AWS_CONFIGURATION;
+            return buildValidationResult(errors, description);
         }
         try {
             try (SdkHttpClient httpClient = ApacheHttpClient.builder().build();
@@ -150,13 +151,13 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
                             AwsBasicCredentials.create(accessKey, secretKey)))
                     .build()) {
                 client.getRestApis(GetRestApisRequest.builder().limit(1).build());
-                validatePlanMappings(environment, client, errors);
+                description = validatePlanMappings(environment, client, errors);
             }
         } catch (SdkException e) {
             log.error("AWS gateway validation failed while contacting AWS API Gateway.", e);
-            errors.add(INVALID_AWS_CONFIGURATION);
+            description = INVALID_AWS_CONFIGURATION;
         }
-        return buildValidationResult(errors);
+        return buildValidationResult(errors, description);
     }
 
     @Override
@@ -202,9 +203,9 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         return AWSConstants.AWS_API_EXECUTION_URL_TEMPLATE;
     }
 
-    private void validatePlanMappings(Environment environment, ApiGatewayClient client, List<String> errors) {
+    private String validatePlanMappings(Environment environment, ApiGatewayClient client, Map<String, String> errors) {
         if (environment.getAdditionalProperties() == null) {
-            return;
+            return null;
         }
         for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
             if (!StringUtils.startsWith(property.getKey(), "plan_mapping.")) {
@@ -218,24 +219,30 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
                 client.getUsagePlan(GetUsagePlanRequest.builder().usagePlanId(usagePlanId).build());
             } catch (SdkException e) {
                 log.error("AWS plan mapping validation failed for usage plan ID: " + usagePlanId, e);
-                errors.add(INVALID_AWS_PLAN_MAPPING_CONFIGURATION);
+                errors.put(property.getKey(), "Invalid usage plan ID");
             }
         }
+        if (!errors.isEmpty()) {
+            return INVALID_AWS_PLAN_MAPPING_CONFIGURATION;
+        }
+        return null;
     }
 
-    private GatewayEnvironmentValidationResult buildValidationResult(List<String> errors) {
+    private GatewayEnvironmentValidationResult buildValidationResult(Map<String, String> errors, String description) {
         GatewayEnvironmentValidationResult validationResult = new GatewayEnvironmentValidationResult();
-        validationResult.setValid(errors.isEmpty());
+        validationResult.setValid(StringUtils.isBlank(description));
+        validationResult.setDescription(description);
         validationResult.setErrors(errors);
         return validationResult;
     }
 
     private ConfigurationDto buildPlanMappingConfiguration(List<SubscriptionPolicy> subscriptionPolicies) {
-        ConfigurationDto configuration = new ConfigurationDto(PLAN_MAPPING_CONFIG_NAME, "Plan Mapping", MAPPING_TYPE,
-                "Map local WSO2 plans to AWS usage plans.", "", false, false, Collections.emptyList(), false);
+        ConfigurationDto configuration = new ConfigurationDto(PLAN_MAPPING_CONFIG_NAME, "AWS Usage Plan Assignment",
+                MAPPING_TYPE, "For each WSO2 subscription policy, enter the AWS usage plan ID to apply when "
+                        + "generating third-party API keys.", "", false, false, Collections.emptyList(), false);
         Map<String, String> labels = new HashMap<>();
-        labels.put(LEFT_LABEL_KEY, "WSO2 Plan");
-        labels.put(RIGHT_LABEL_KEY, "Usage Plan ID");
+        labels.put(LEFT_LABEL_KEY, "WSO2 Subscription Policy");
+        labels.put(RIGHT_LABEL_KEY, "AWS Usage Plan ID");
         configuration.setLabels(labels);
         configuration.setValues(buildPlanMappingValues(subscriptionPolicies));
         return configuration;
