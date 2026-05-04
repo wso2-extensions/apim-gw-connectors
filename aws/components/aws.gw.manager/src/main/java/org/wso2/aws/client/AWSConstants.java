@@ -29,7 +29,7 @@ public class AWSConstants {
     // Environment related constants
     public static final String AWS_ENVIRONMENT_REGION = "region";
     public static final String AWS_ENVIRONMENT_ACCESS_KEY = "access_key";
-        public static final String AWS_ENVIRONMENT_SECRET_KEY = "secret_key";
+    public static final String AWS_ENVIRONMENT_SECRET_KEY = "secret_key";
     public static final String AWS_API_STAGE = "stage";
 
     // Authorizer related constants
