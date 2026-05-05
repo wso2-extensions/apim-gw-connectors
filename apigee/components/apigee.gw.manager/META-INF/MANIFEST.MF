@@ -1,0 +1,63 @@
+Manifest-Version: 1.0
+Bnd-LastModified: 1771240673826
+Build-Jdk: 17.0.18
+Built-By: Dinith Edirisinghe
+Bundle-ClassPath: .,google-auth-library-oauth2-http-1.23.0.jar,google-
+ http-client-1.44.1.jar,google-http-client-gson-1.44.1.jar
+Bundle-Description: WSO2 is an open source application development sof
+ tware company focused on providing service-oriented        architectu
+ re solutions for professional developers.
+Bundle-DocURL: http://www.wso2.org/
+Bundle-License: http://www.apache.org/licenses/LICENSE-2.0.txt
+Bundle-ManifestVersion: 2
+Bundle-Name: apigee.gw.manager
+Bundle-SymbolicName: apigee.gw.manager
+Bundle-Vendor: WSO2
+Bundle-Version: 1.0.0.SNAPSHOT
+Created-By: Apache Maven Bundle Plugin
+Embed-Dependency: google-auth-library-*,google-http-client*,opencensus
+ -*,json;scope=compile|runtime;inline=true
+Embedded-Artifacts: google-auth-library-oauth2-http-1.23.0.jar;g="com.
+ google.auth";a="google-auth-library-oauth2-http";v="1.23.0",google-ht
+ tp-client-1.44.1.jar;g="com.google.http-client";a="google-http-client
+ ";v="1.44.1",google-http-client-gson-1.44.1.jar;g="com.google.http-cl
+ ient";a="google-http-client-gson";v="1.44.1"
+Export-Package: org.wso2.apigee.client;version="1.0.0.SNAPSHOT";uses:=
+ "org.wso2.carbon.apimgt.api,org.wso2.carbon.apimgt.api.model",org.wso
+ 2.apigee.client.util;version="1.0.0.SNAPSHOT";uses:="com.google.gson,
+ org.wso2.carbon.apimgt.api,org.wso2.carbon.apimgt.api.model"
+Import-Package: org.wso2.carbon.apimgt.api;version="[9.0,10.0)",org.ws
+ o2.carbon.apimgt.api.model;version="[9.0,10.0)",org.apache.commons.lo
+ gging;version="[1.2,2.0)",javax.net.ssl,javax.crypto,javax.crypto.spe
+ c,com.google.auth;resolution:=optional,com.google.common.base;resolut
+ ion:=optional;version="[33.0,34)",com.google.common.cache;resolution:
+ =optional;version="[33.0,34)",com.google.common.collect;resolution:=o
+ ptional;version="[33.0,34)",com.google.common.io;resolution:=optional
+ ;version="[33.0,34)",com.google.common.reflect;resolution:=optional;v
+ ersion="[33.0,34)",com.google.common.util.concurrent;resolution:=opti
+ onal;version="[33.0,34)",com.google.gson;resolution:=optional;version
+ ="[2.11,3)",com.google.gson.stream;resolution:=optional;version="[2.1
+ 1,3)",io.opencensus.common;resolution:=optional,io.opencensus.contrib
+ .http.util;resolution:=optional,io.opencensus.trace;resolution:=optio
+ nal,io.opencensus.trace.export;resolution:=optional,io.opencensus.tra
+ ce.propagation;resolution:=optional,javax.annotation;resolution:=opti
+ onal;version="[1.3,2)",org.apache.http;resolution:=optional;version="
+ [4.4,5)",org.apache.http.client;resolution:=optional,org.apache.http.
+ client.methods;resolution:=optional,org.apache.http.conn;resolution:=
+ optional,org.apache.http.conn.params;resolution:=optional,org.apache.
+ http.conn.routing;resolution:=optional,org.apache.http.conn.scheme;re
+ solution:=optional,org.apache.http.conn.ssl;resolution:=optional,org.
+ apache.http.entity;resolution:=optional;version="[4.4,5)",org.apache.
+ http.impl.client;resolution:=optional,org.apache.http.impl.conn;resol
+ ution:=optional,org.apache.http.impl.conn.tsccm;resolution:=optional,
+ org.apache.http.message;resolution:=optional;version="[4.4,5)",org.ap
+ ache.http.params;resolution:=optional;version="[4.4,5)",org.apache.ht
+ tp.protocol;resolution:=optional;version="[4.4,5)",org.wso2.apigee.cl
+ ient.util;resolution:=optional;version="[1.0,2)",org.wso2.carbon.apim
+ gt.impl.importexport;version="[9.0,10.0)"
+Provide-Capability: osgi.service;objectClass:List<String>="org.wso2.ca
+ rbon.apimgt.api.model.GatewayAgentConfiguration"
+Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
+Service-Component: OSGI-INF/apigee.external.gateway.configuration.comp
+ onent.xml
+Tool: Bnd-3.2.0.201605172007
