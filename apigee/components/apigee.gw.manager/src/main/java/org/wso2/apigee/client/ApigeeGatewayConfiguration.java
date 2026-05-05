@@ -138,9 +138,9 @@ public class ApigeeGatewayConfiguration implements GatewayAgentConfiguration {
                 ApigeeConstants.APIGEE_API_HUB_LOCATION,
                 "API Hub Location",
                 "input",
-                "API Hub location/region (e.g. us-west1, us-east1, global). Defaults to 'global' if left empty. Only needed if API Hub is enabled.",
-                "global",
-                false,  // optional
+                "API Hub location/region (e.g. us-west1, us-east1, global).",
+                "",
+                true,   // required
                 false,  // not masked
                 Collections.emptyList(),
                 false
