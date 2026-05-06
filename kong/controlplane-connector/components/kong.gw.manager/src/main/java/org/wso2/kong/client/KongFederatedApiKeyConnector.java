@@ -43,6 +43,7 @@ import org.wso2.kong.client.model.PagedResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -79,7 +80,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     private String controlPlaneId;
     private String deploymentType;
     private String environmentId;
-    private final List<LocalPolicyRemoteMapping> planMappings = new ArrayList<>();
+    private final Map<String, String> planMappings = new LinkedHashMap<>();
 
     /**
      * Initializes the Kong Konnect client from the environment URL, control plane ID, and access token.
@@ -125,7 +126,7 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     @Override
     public String createApiKey(String apiKeyUuid, String apiKeyValue,
                                String apiReferenceArtifact,
-                               String localPolicyId, Map<String, String> properties)
+                               String localPolicyName, Map<String, String> properties)
             throws APIManagementException {
         if (StringUtils.isAnyBlank(apiKeyUuid, apiKeyValue)) {
             throw new APIManagementException("API key UUID and value are required");
@@ -230,12 +231,12 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     }
 
     /**
-     * Adds ACL and consumer-group associations for the mapped remote consumer group.
+     * Adds ACL and consumer-group associations for the mapped remote consumer group name.
      */
     @Override
-    public void associateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyId)
+    public void associateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyName)
             throws APIManagementException {
-        String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
+        String remotePolicyReference = resolveRemotePolicyReference(localPolicyName, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
             return;
         }
@@ -265,12 +266,12 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     }
 
     /**
-     * Removes ACL and consumer-group associations for the mapped remote consumer group.
+     * Removes ACL and consumer-group associations for the mapped remote consumer group name.
      */
     @Override
-    public void dissociateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyId)
+    public void dissociateSubscriptionPolicy(String apiKeyReferenceArtifact, String localPolicyName)
             throws APIManagementException {
-        String remotePolicyReference = resolveRemotePolicyReference(localPolicyId, true);
+        String remotePolicyReference = resolveRemotePolicyReference(localPolicyName, true);
         if (StringUtils.isBlank(remotePolicyReference)) {
             return;
         }
@@ -293,34 +294,62 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
     }
 
     /**
-     * Extracts the Kong consumer group ID from the connector-owned flat environment mapping.
+     * Resolves the Kong consumer group ID from the connector-owned flat environment mapping.
      */
-    private String resolveRemotePolicyId(String remotePolicyReference) {
-        return StringUtils.trimToNull(remotePolicyReference);
+    private String resolveRemotePolicyId(String remotePolicyReference) throws APIManagementException {
+        String consumerGroupName = StringUtils.trimToNull(remotePolicyReference);
+        if (consumerGroupName == null) {
+            return null;
+        }
+        List<KongConsumerGroup> matchedConsumerGroups = new ArrayList<>();
+        try {
+            PagedResponse<KongConsumerGroup> response = apiGatewayClient.listConsumerGroups(controlPlaneId,
+                    KongConstants.DEFAULT_CONSUMER_GROUP_LIST_LIMIT);
+            if (response == null || response.getData() == null) {
+                throw new APIManagementException("Mapped Kong consumer group was not found: " + consumerGroupName);
+            }
+            for (KongConsumerGroup group : response.getData()) {
+                if (group != null && StringUtils.equals(group.getName(), consumerGroupName)
+                        && StringUtils.isNotBlank(group.getId())) {
+                    matchedConsumerGroups.add(group);
+                }
+            }
+        } catch (APIManagementException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new APIManagementException("Error resolving Kong consumer group: " + consumerGroupName, e);
+        }
+        if (matchedConsumerGroups.isEmpty()) {
+            throw new APIManagementException("Mapped Kong consumer group was not found: " + consumerGroupName);
+        }
+        if (matchedConsumerGroups.size() > 1) {
+            throw new APIManagementException("Multiple Kong consumer groups found with the same name: "
+                    + consumerGroupName);
+        }
+        return matchedConsumerGroups.get(0).getId();
     }
 
-    private String resolveRemotePolicyReference(String localPolicyId, boolean requireLocalPolicy)
+    private String resolveRemotePolicyReference(String localPolicyName, boolean requireLocalPolicy)
             throws APIManagementException {
         if (planMappings.isEmpty()) {
             return null;
         }
-        if (StringUtils.isBlank(localPolicyId)) {
+        if (StringUtils.isBlank(localPolicyName)) {
             if (requireLocalPolicy) {
                 throw new APIManagementException("Local subscription policy is required for external plan assignment");
             }
             return null;
         }
-        for (LocalPolicyRemoteMapping planMapping : planMappings) {
-            if (StringUtils.equals(localPolicyId, planMapping.getLocalPolicyId())) {
-                if (StringUtils.isBlank(planMapping.getRemotePlanReference())) {
-                    throw new APIManagementException("External plan assignment is not configured for local policy: "
-                            + localPolicyId);
-                }
-                return planMapping.getRemotePlanReference();
-            }
+        String remotePlanReference = planMappings.get(localPolicyName);
+        if (remotePlanReference == null) {
+            throw new APIManagementException("No external plan assignment found for local policy: " + localPolicyName
+                    + " in environment: " + environmentId);
         }
-        throw new APIManagementException("No external plan assignment found for local policy: " + localPolicyId
-                + " in environment: " + environmentId);
+        if (StringUtils.isBlank(remotePlanReference)) {
+            throw new APIManagementException("External plan assignment is not configured for local policy: "
+                    + localPolicyName);
+        }
+        return remotePlanReference;
     }
 
     private String buildApiKeyReferenceArtifact(String consumerId, String remoteApiId) {
@@ -726,29 +755,11 @@ public class KongFederatedApiKeyConnector implements FederatedApiKeyConnector {
             if (!StringUtils.startsWith(key, PLAN_MAPPING_PROPERTY_PREFIX)) {
                 continue;
             }
-            String localPolicyId = StringUtils.removeStart(key, PLAN_MAPPING_PROPERTY_PREFIX);
+            String localPolicyName = StringUtils.removeStart(key, PLAN_MAPPING_PROPERTY_PREFIX);
             String remotePlanReference = StringUtils.trimToNull(property.getValue());
-            if (StringUtils.isNotBlank(localPolicyId) && remotePlanReference != null) {
-                planMappings.add(new LocalPolicyRemoteMapping(localPolicyId, remotePlanReference));
+            if (StringUtils.isNotBlank(localPolicyName) && remotePlanReference != null) {
+                planMappings.put(localPolicyName, remotePlanReference);
             }
-        }
-    }
-
-    private static final class LocalPolicyRemoteMapping {
-        private final String localPolicyId;
-        private final String remotePlanReference;
-
-        private LocalPolicyRemoteMapping(String localPolicyId, String remotePlanReference) {
-            this.localPolicyId = localPolicyId;
-            this.remotePlanReference = remotePlanReference;
-        }
-
-        private String getLocalPolicyId() {
-            return localPolicyId;
-        }
-
-        private String getRemotePlanReference() {
-            return remotePlanReference;
         }
     }
 }

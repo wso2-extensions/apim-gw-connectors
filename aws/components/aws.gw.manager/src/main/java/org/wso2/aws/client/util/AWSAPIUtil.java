@@ -22,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -78,6 +79,7 @@ import software.amazon.awssdk.services.apigateway.model.UpdateMethodRequest;
 import software.amazon.awssdk.services.apigateway.model.UpdateRestApiRequest;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -103,6 +105,9 @@ public class AWSAPIUtil {
     private static final String API_KEY_SOURCE_HEADER = "HEADER";
     private static final String AWS_REFERENCE_API_KEY_ENABLED = "apiKeySecurityEnabled";
     private static final String AWS_REFERENCE_API_KEY_HEADER = "apiKeyHeader";
+    private static final String PLAN_MAPPING_PROPERTY_PREFIX = "plan_mapping.";
+    private static final Set<String> NON_MAPPABLE_SUBSCRIPTION_POLICIES = new HashSet<>(
+            Arrays.asList("Unauthenticated", "DefaultSubscriptionless", "AsyncDefaultSubscriptionless"));
 
     public static String importRestAPI(API api, ApiGatewayClient apiGatewayClient, String region,
                                        String stage) throws APIManagementException {
@@ -651,8 +656,27 @@ public class AWSAPIUtil {
         api.setGatewayVendor("external");
         api.setEnableSubscriberVerification(false);
         api.setGatewayType(environment.getGatewayType());
-        api.setAvailableTiers(new HashSet<>(Collections.singleton(new Tier("Unlimited"))));
+        api.setAvailableTiers(resolveMappedSubscriptionTiers(environment));
         return api;
+    }
+
+    private static Set<Tier> resolveMappedSubscriptionTiers(Environment environment) {
+        Set<Tier> availableTiers = new HashSet<>();
+        if (environment.getAdditionalProperties() == null) {
+            return availableTiers;
+        }
+        for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
+            if (!property.getKey().startsWith(PLAN_MAPPING_PROPERTY_PREFIX)
+                    || StringUtils.isBlank(property.getValue())) {
+                continue;
+            }
+            String policyName = StringUtils.removeStart(property.getKey(), PLAN_MAPPING_PROPERTY_PREFIX);
+            if (StringUtils.isBlank(policyName) || NON_MAPPABLE_SUBSCRIPTION_POLICIES.contains(policyName)) {
+                continue;
+            }
+            availableTiers.add(new Tier(policyName));
+        }
+        return availableTiers;
     }
 
     /**

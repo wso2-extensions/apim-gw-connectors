@@ -33,8 +33,6 @@ import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
 import org.wso2.carbon.apimgt.api.model.GatewayEnvironmentValidationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
-import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
-import org.wso2.carbon.apimgt.api.model.policy.SubscriptionPolicy;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkException;
@@ -43,19 +41,18 @@ import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient;
 import software.amazon.awssdk.services.apigateway.model.GetRestApisRequest;
-import software.amazon.awssdk.services.apigateway.model.GetUsagePlanRequest;
+import software.amazon.awssdk.services.apigateway.model.GetUsagePlansRequest;
+import software.amazon.awssdk.services.apigateway.model.GetUsagePlansResponse;
+import software.amazon.awssdk.services.apigateway.model.UsagePlan;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 
 /**
@@ -73,13 +70,11 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
     private static final String INVALID_AWS_CONFIGURATION =
             "The AWS gateway configuration you added is invalid. Verify the region, access key, and secret key.";
     private static final String INVALID_AWS_PLAN_MAPPING_CONFIGURATION =
-            "The AWS usage plan assignments you added are invalid. Verify the AWS usage plan IDs.";
+            "The AWS usage plan assignments you added are invalid. Verify the AWS usage plan names.";
     private static final String PLAN_MAPPING_CONFIG_NAME = "plan_mapping";
-    private static final String MAPPING_TYPE = "mapping";
-    private static final String LEFT_LABEL_KEY = "left";
-    private static final String RIGHT_LABEL_KEY = "right";
-    private static final Set<String> NON_MAPPABLE_POLICIES = new HashSet<>(
-            java.util.Arrays.asList("Unauthenticated", "DefaultSubscriptionless", "AsyncDefaultSubscriptionless"));
+    private static final String PLAN_MAPPING_PROPERTY_PREFIX = "plan_mapping.";
+    private static final String PLAN_MAPPING_CONFIG_TYPE = "plan_mapping";
+    private static final String USAGE_PLAN_NAME_LABEL = "AWS Usage Plan Name";
 
     @Override
     public String getGatewayDeployerImplementation() {
@@ -115,13 +110,8 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         configurationDtoList.add(new ConfigurationDto("stage", "Stage Name", "input", "Default stage name", "", true,
                 false,
                 Collections.emptyList(), false));
+        configurationDtoList.add(buildPlanMappingConfiguration());
 
-        return configurationDtoList;
-    }
-
-    public List<ConfigurationDto> getConnectionConfigurations(List<SubscriptionPolicy> subscriptionPolicies) {
-        List<ConfigurationDto> configurationDtoList = new ArrayList<>(getConnectionConfigurations());
-        configurationDtoList.add(buildPlanMappingConfiguration(subscriptionPolicies));
         return configurationDtoList;
     }
 
@@ -207,25 +197,73 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         if (environment.getAdditionalProperties() == null) {
             return null;
         }
-        for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
-            if (!StringUtils.startsWith(property.getKey(), "plan_mapping.")) {
-                continue;
-            }
-            String usagePlanId = StringUtils.trimToNull(property.getValue());
-            if (usagePlanId == null) {
-                continue;
-            }
-            try {
-                client.getUsagePlan(GetUsagePlanRequest.builder().usagePlanId(usagePlanId).build());
-            } catch (SdkException e) {
-                log.error("AWS plan mapping validation failed for usage plan ID: " + usagePlanId, e);
-                errors.put(property.getKey(), "Invalid usage plan ID");
-            }
+        try {
+            resolveUsagePlanMappings(environment, client, errors);
+        } catch (SdkException e) {
+            log.error("AWS plan mapping validation failed while listing usage plans.", e);
+            return INVALID_AWS_PLAN_MAPPING_CONFIGURATION;
         }
         if (!errors.isEmpty()) {
             return INVALID_AWS_PLAN_MAPPING_CONFIGURATION;
         }
         return null;
+    }
+
+    private void resolveUsagePlanMappings(Environment environment, ApiGatewayClient client, Map<String, String> errors) {
+        List<UsagePlan> usagePlans = listUsagePlans(client);
+        for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
+            if (!StringUtils.startsWith(property.getKey(), PLAN_MAPPING_PROPERTY_PREFIX)) {
+                continue;
+            }
+            String usagePlanName = getPlanMappingName(property.getValue());
+            if (usagePlanName == null) {
+                if (StringUtils.isNotBlank(property.getValue())) {
+                    errors.put(property.getKey(), "Invalid usage plan name");
+                }
+                continue;
+            }
+            List<UsagePlan> matchedUsagePlans = findUsagePlansByName(usagePlans, usagePlanName);
+            if (matchedUsagePlans.isEmpty()) {
+                log.warn("AWS plan mapping validation failed. Invalid usage plan name: " + usagePlanName);
+                errors.put(property.getKey(), "Invalid usage plan name");
+                continue;
+            }
+            if (matchedUsagePlans.size() > 1) {
+                log.warn("AWS plan mapping validation failed. Duplicate usage plan name: " + usagePlanName);
+                errors.put(property.getKey(), "Multiple AWS usage plans found with the same name");
+                continue;
+            }
+        }
+    }
+
+    private String getPlanMappingName(String planMappingValue) {
+        return StringUtils.trimToNull(planMappingValue);
+    }
+
+    private List<UsagePlan> listUsagePlans(ApiGatewayClient client) {
+        List<UsagePlan> usagePlans = new ArrayList<>();
+        String position = null;
+        do {
+            GetUsagePlansResponse response = client.getUsagePlans(GetUsagePlansRequest.builder()
+                    .position(position)
+                    .build());
+            if (response.items() != null) {
+                usagePlans.addAll(response.items());
+            }
+            position = response.position();
+        } while (StringUtils.isNotBlank(position));
+        return usagePlans;
+    }
+
+    private List<UsagePlan> findUsagePlansByName(List<UsagePlan> usagePlans, String usagePlanName) {
+        List<UsagePlan> matchedUsagePlans = new ArrayList<>();
+        for (UsagePlan usagePlan : usagePlans) {
+            if (usagePlan != null && StringUtils.equals(usagePlan.name(), usagePlanName)
+                    && StringUtils.isNotBlank(usagePlan.id())) {
+                matchedUsagePlans.add(usagePlan);
+            }
+        }
+        return matchedUsagePlans;
     }
 
     private GatewayEnvironmentValidationResult buildValidationResult(Map<String, String> errors, String description) {
@@ -236,71 +274,13 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         return validationResult;
     }
 
-    private ConfigurationDto buildPlanMappingConfiguration(List<SubscriptionPolicy> subscriptionPolicies) {
+    private ConfigurationDto buildPlanMappingConfiguration() {
         ConfigurationDto configuration = new ConfigurationDto(PLAN_MAPPING_CONFIG_NAME, "AWS Usage Plan Assignment",
-                MAPPING_TYPE, "For each WSO2 subscription policy, enter the AWS usage plan ID to apply when "
-                        + "generating third-party API keys.", "", false, false, Collections.emptyList(), false);
-        Map<String, String> labels = new HashMap<>();
-        labels.put(LEFT_LABEL_KEY, "WSO2 Subscription Policy");
-        labels.put(RIGHT_LABEL_KEY, "AWS Usage Plan ID");
-        configuration.setLabels(labels);
-        configuration.setValues(buildPlanMappingValues(subscriptionPolicies));
+                PLAN_MAPPING_CONFIG_TYPE, "For each WSO2 subscription policy, enter the AWS usage plan name to apply "
+                        + "when generating third-party API keys.", USAGE_PLAN_NAME_LABEL, false, false,
+                Collections.emptyList(), false);
+        configuration.setValues(Collections.emptyList());
         return configuration;
-    }
-
-    private List<Object> buildPlanMappingValues(List<SubscriptionPolicy> subscriptionPolicies) {
-        List<Object> values = new ArrayList<>();
-        if (subscriptionPolicies == null) {
-            return values;
-        }
-        Set<String> supportedApiTypes = resolveSupportedApiTypes();
-        for (SubscriptionPolicy policy : subscriptionPolicies) {
-            if (policy == null || policy.getUUID() == null || policy.getPolicyName() == null) {
-                continue;
-            }
-            if (NON_MAPPABLE_POLICIES.contains(policy.getPolicyName())) {
-                continue;
-            }
-            String apiType = resolvePolicyApiType(policy);
-            if (apiType == null || !supportedApiTypes.contains(apiType)) {
-                continue;
-            }
-            Map<String, String> value = new LinkedHashMap<>();
-            value.put("id", policy.getUUID());
-            value.put("label", policy.getDisplayName() != null ? policy.getDisplayName() : policy.getPolicyName());
-            value.put("apiType", apiType);
-            values.add(value);
-        }
-        return values;
-    }
-
-    private Set<String> resolveSupportedApiTypes() {
-        try {
-            GatewayPortalConfiguration configuration = getGatewayFeatureCatalog();
-            if (configuration != null && configuration.getSupportedAPITypes() != null) {
-                return new HashSet<>(configuration.getSupportedAPITypes());
-            }
-        } catch (APIManagementException e) {
-            log.warn("Failed to resolve AWS supported API types for plan mapping configuration", e);
-        }
-        return Collections.emptySet();
-    }
-
-    private String resolvePolicyApiType(SubscriptionPolicy policy) {
-        if (policy.getDefaultQuotaPolicy() == null || policy.getDefaultQuotaPolicy().getType() == null) {
-            return null;
-        }
-        String type = policy.getDefaultQuotaPolicy().getType();
-        if (PolicyConstants.REQUEST_COUNT_TYPE.equalsIgnoreCase(type)) {
-            return "rest";
-        }
-        if (PolicyConstants.EVENT_COUNT_TYPE.equalsIgnoreCase(type)) {
-            return "async";
-        }
-        if (PolicyConstants.AI_API_QUOTA_TYPE.equalsIgnoreCase(type)) {
-            return "ai-api";
-        }
-        return null;
     }
 
 }
