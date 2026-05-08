@@ -27,6 +27,7 @@ import feign.gson.GsonDecoder;
 import feign.gson.GsonEncoder;
 import feign.slf4j.Slf4jLogger;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -52,6 +53,7 @@ import org.wso2.kong.client.model.PagedResponse;
 import org.wso2.kong.client.util.KongAPIUtil;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -67,6 +69,9 @@ import java.util.Set;
 public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
 
     private static final Log log = LogFactory.getLog(KongFederatedAPIDiscovery.class);
+    private static final String PLAN_MAPPING_PROPERTY_PREFIX = "plan_mapping.";
+    private static final Set<String> NON_MAPPABLE_SUBSCRIPTION_POLICIES = new HashSet<>(
+            Arrays.asList("Unauthenticated", "DefaultSubscriptionless", "AsyncDefaultSubscriptionless"));
 
     private Environment environment;
     private KongKonnectApi apiGatewayClient;
@@ -192,7 +197,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                         }
                     }
 
-                    api.setAvailableTiers(new HashSet<>(Collections.singleton(new Tier(KongConstants.DEFAULT_TIER))));
+                    api.setAvailableTiers(resolveMappedSubscriptionTiers());
 
                     String selectedAPILevelRateLimitPolicy = null;
 
@@ -233,6 +238,17 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             if (p != null) {
                                 selectedAPILevelRateLimitPolicy = p;
                             }
+                        }
+                    }
+
+                    String apiKeyHeader = resolveKeyAuthHeader(plugins);
+                    boolean apiKeyEnabled = apiKeyHeader != null;
+                    if (apiKeyEnabled) {
+                        api.setApiSecurity(KongConstants.KONG_API_SECURITY_API_KEY);
+                        api.setApiKeyHeader(apiKeyHeader);
+                        if (api.getSwaggerDefinition() != null) {
+                            api.setSwaggerDefinition(KongAPIUtil.applyApiKeySecurityToOas(
+                                    api.getSwaggerDefinition(), apiKeyHeader));
                         }
                     }
                     if (selectedAPILevelRateLimitPolicy != null) {
@@ -298,8 +314,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                     String endpoint = KongAPIUtil.buildEndpointUrl(svc.getProtocol(), svc.getHost(), svc.getPort(),
                             svc.getPath());
                     api.setEndpointConfig(KongAPIUtil.buildEndpointConfigJson(endpoint, endpoint, false));
-                    api.setAvailableTiers(
-                            new HashSet<>(java.util.Collections.singleton(new Tier(KongConstants.DEFAULT_TIER))));
+                    api.setAvailableTiers(resolveMappedSubscriptionTiers());
 
                     String selectedAPILevelRateLimitPolicy = null;
 
@@ -328,6 +343,15 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                             }
                         }
                     }
+
+                    String apiKeyHeader = resolveKeyAuthHeader(plugins);
+                    boolean apiKeyEnabled = apiKeyHeader != null;
+                    if (apiKeyEnabled) {
+                        api.setApiSecurity(KongConstants.KONG_API_SECURITY_API_KEY);
+                        api.setApiKeyHeader(apiKeyHeader);
+                        api.setSwaggerDefinition(KongAPIUtil.applyApiKeySecurityToOas(api.getSwaggerDefinition(),
+                                apiKeyHeader));
+                    }
                     if (selectedAPILevelRateLimitPolicy != null) {
                         api.setApiLevelPolicy(selectedAPILevelRateLimitPolicy);
                     }
@@ -354,4 +378,40 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
     public boolean isAPIUpdated(String existingReferenceArtifact, String newReferenceArtifact) {
         return !java.util.Objects.equals(existingReferenceArtifact, newReferenceArtifact);
     }
+
+    private String resolveKeyAuthHeader(List<KongPlugin> plugins) {
+        if (plugins == null) {
+            return null;
+        }
+        for (KongPlugin plugin : plugins) {
+            if (plugin == null || plugin.getName() == null) {
+                continue;
+            }
+            if (KongConstants.KONG_KEY_AUTH_PLUGIN_TYPE.equals(plugin.getName())
+                    && !Boolean.FALSE.equals(plugin.getEnabled())) {
+                return KongAPIUtil.resolveApiKeyHeader(plugin);
+            }
+        }
+        return null;
+    }
+
+    private Set<Tier> resolveMappedSubscriptionTiers() {
+        Set<Tier> availableTiers = new HashSet<>();
+        if (environment == null || environment.getAdditionalProperties() == null) {
+            return availableTiers;
+        }
+        for (Map.Entry<String, String> property : environment.getAdditionalProperties().entrySet()) {
+            if (!property.getKey().startsWith(PLAN_MAPPING_PROPERTY_PREFIX)
+                    || StringUtils.isBlank(property.getValue())) {
+                continue;
+            }
+            String policyName = StringUtils.removeStart(property.getKey(), PLAN_MAPPING_PROPERTY_PREFIX);
+            if (StringUtils.isBlank(policyName) || NON_MAPPABLE_SUBSCRIPTION_POLICIES.contains(policyName)) {
+                continue;
+            }
+            availableTiers.add(new Tier(policyName));
+        }
+        return availableTiers;
+    }
+
 }
