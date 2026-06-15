@@ -24,6 +24,7 @@
     <artifactId>aws.gw.client</artifactId>
     <version>1.5.1-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <name>AWS Gateway Connector</name>
 
     <parent>
         <groupId>org.wso2</groupId>
