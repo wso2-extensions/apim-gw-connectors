@@ -18,6 +18,9 @@
 
 package org.wso2.aws.client;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.aws.client.util.AWSAPIUtil;
 import org.wso2.aws.client.util.GatewayUtil;
 import org.wso2.carbon.apimgt.api.APIManagementException;
@@ -45,6 +48,7 @@ import java.util.stream.Collectors;
  * This class controls the API artifact deployments on the AWS API Gateway
  */
 public class AWSGatewayDeployer implements GatewayDeployer {
+    private static final Log log = LogFactory.getLog(AWSGatewayDeployer.class);
     private ApiGatewayClient apiGatewayClient;
     private String region;
     private String stage;
@@ -76,6 +80,7 @@ public class AWSGatewayDeployer implements GatewayDeployer {
     @Override
     public String deploy(API api, String externalReference) throws APIManagementException {
         try {
+            logUnsupportedCustomApiKeyHeader(api);
             if (externalReference == null) {
                 return AWSAPIUtil.importRestAPI(api, apiGatewayClient, region, stage);
             } else {
@@ -148,4 +153,28 @@ public class AWSGatewayDeployer implements GatewayDeployer {
         }
     }
 
+    private void logUnsupportedCustomApiKeyHeader(API api) {
+        if (api == null || !isApiKeySecurityEnabled(api.getApiSecurity())) {
+            return;
+        }
+        String configuredApiKeyHeader = api.getApiKeyHeader();
+        if (StringUtils.isNotBlank(configuredApiKeyHeader)
+                && !AWSConstants.AWS_API_KEY_HEADER.equalsIgnoreCase(configuredApiKeyHeader)) {
+            log.warn("AWS API Gateway uses native API key header '" + AWSConstants.AWS_API_KEY_HEADER + "'. Configured "
+                    + "header '" + configuredApiKeyHeader + "' is preserved in API metadata, but remote invocation "
+                    + "may fail unless custom validation is configured in AWS.");
+        }
+    }
+
+    private boolean isApiKeySecurityEnabled(String apiSecurity) {
+        if (StringUtils.isBlank(apiSecurity)) {
+            return false;
+        }
+        for (String token : apiSecurity.split(",")) {
+            if (AWSConstants.API_KEY_SECURITY.equalsIgnoreCase(token.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

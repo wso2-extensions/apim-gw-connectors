@@ -19,11 +19,12 @@ package org.wso2.kong.client;
 
 import feign.Response;
 import feign.codec.ErrorDecoder;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 /**
  * Custom Error Decoder for handling errors from Kong Gateway.
@@ -40,7 +41,7 @@ public class KongErrorDecoder implements ErrorDecoder {
         try {
             if (response.body() != null) {
                 try (InputStream is = response.body().asInputStream()) {
-                    responseStr = IOUtils.toString(is, StandardCharsets.UTF_8.toString());
+                    responseStr = readResponseBody(is);
                 }
             }
         } catch (IOException e) {
@@ -54,5 +55,17 @@ public class KongErrorDecoder implements ErrorDecoder {
                 "HTTP " + response.status() + " from " + method + " " + url +
                         (responseStr != null ? (": " + responseStr) : "");
         return new KongGatewayException(response.status(), msg);
+    }
+
+    private String readResponseBody(InputStream inputStream) throws IOException {
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            char[] buffer = new char[1024];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                builder.append(buffer, 0, read);
+            }
+        }
+        return builder.toString();
     }
 }

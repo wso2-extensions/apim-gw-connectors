@@ -25,7 +25,9 @@ import com.google.gson.JsonParser;
 import org.osgi.service.component.annotations.Component;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.ConfigurationDto;
+import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
+import org.wso2.carbon.apimgt.api.model.GatewayEnvironmentValidationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayMode;
 import org.wso2.carbon.apimgt.api.model.GatewayPortalConfiguration;
 
@@ -61,6 +63,14 @@ public class EnvoyGatewayConfiguration implements GatewayAgentConfiguration {
     @Override
     public List<ConfigurationDto> getConnectionConfigurations() {
         return new ArrayList<>();
+    }
+
+    @Override
+    public GatewayEnvironmentValidationResult validateEnvironment(Environment environment) {
+        GatewayEnvironmentValidationResult validationResult = new GatewayEnvironmentValidationResult();
+        validationResult.setValid(true);
+        validationResult.setErrors(Collections.emptyMap());
+        return validationResult;
     }
 
     @Override

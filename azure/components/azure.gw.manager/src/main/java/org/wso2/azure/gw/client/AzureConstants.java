@@ -43,6 +43,8 @@ public class AzureConstants {
     public static final String AZURE_EXTERNAL_REFERENCE_VERSION_SET_ID = "versionSetId";
     public static final String AZURE_EXTERNAL_REFERENCE_VERSIONING_SCHEME = "versioningScheme";
     public static final String AZURE_EXTERNAL_REFERENCE_CREATED_TIME_EPOCH = "createdTimeEpoch";
+    public static final String AZURE_EXTERNAL_REFERENCE_API_KEY_SECURITY_ENABLED = "apiKeySecurityEnabled";
+    public static final String AZURE_EXTERNAL_REFERENCE_API_KEY_HEADER = "apiKeyHeader";
 
     public static final String AZURE_OPENAPI_EXPORT_VERSION = "2024-05-01";
     public static final String AZURE_OPENAPI_EXPORT_FORMAT = "openapi-link";
@@ -91,4 +93,7 @@ public class AzureConstants {
     public static final String AZURE_ENVIRONMENT_RESOURCE_GROUP = "resource_group";
     public static final String AZURE_ENVIRONMENT_SERVICE_NAME = "service_name";
     public static final String AZURE_ENVIRONMENT_HOSTNAME = "host_name";
+
+    public static final String AZURE_DEFAULT_SUBSCRIPTION_KEY_HEADER = "Ocp-Apim-Subscription-Key";
+    public static final String AZURE_API_SECURITY_API_KEY = "api_key";
 }
