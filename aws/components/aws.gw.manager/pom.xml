@@ -47,6 +47,7 @@
                             software.amazon.awssdk.services.apigateway.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.core.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.auth.*; version="${software.amazon.awssdk.version.range}",
+                            software.amazon.awssdk.services.sts.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.http.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.regions.*; version="${software.amazon.awssdk.version.range}",
                             software.amazon.awssdk.crt.*; version="${software.amazon.awssdk.version.range}",

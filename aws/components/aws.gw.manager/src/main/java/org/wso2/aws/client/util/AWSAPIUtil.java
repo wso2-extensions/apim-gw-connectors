@@ -545,10 +545,22 @@ public class AWSAPIUtil {
      * @return List of RestApi objects
      */
     public static List<RestApi> getRestApis(ApiGatewayClient client) {
-
-        GetRestApisRequest restApisRequest = GetRestApisRequest.builder().build();
-        GetRestApisResponse restApisResponse = client.getRestApis(restApisRequest);
-        return restApisResponse.items();
+        List<RestApi> allRestApis = new ArrayList<>();
+        String position = null;
+        do {
+            GetRestApisRequest.Builder builder = GetRestApisRequest.builder();
+            if (position != null && !position.isEmpty()) {
+                builder.position(position);
+            }
+            // Use maximum limit (500) per page to minimize request count and network roundtrips
+            builder.limit(500);
+            GetRestApisResponse response = client.getRestApis(builder.build());
+            if (response.items() != null) {
+                allRestApis.addAll(response.items());
+            }
+            position = response.position();
+        } while (position != null && !position.isEmpty());
+        return allRestApis;
     }
 
 
@@ -670,18 +682,15 @@ public class AWSAPIUtil {
         }
     }
 
-    /**
-     * Creates a reference artifact by combining a given RestApi object and its Swagger definition in JSON format.
-     *
-     * @param restApi               The RestApi object containing API details.
-     * @param swaggerDefinitionJson The Swagger/OpenAPI definition of the API in JSON format.
-     * @return A JSON string that represents the combined reference artifact.
-     */
-    public static String createReferenceArtifact(RestApi restApi, String swaggerDefinitionJson) {
+
+    public static String createReferenceArtifact(RestApi restApi, String swaggerDefinitionJson, String deploymentId) {
         Gson G = new Gson();
         JsonArray arr = new JsonArray();
         arr.add(G.toJsonTree(restApi));
         arr.add(JsonParser.parseString(swaggerDefinitionJson));
+        if (deploymentId != null) {
+            arr.add(new com.google.gson.JsonPrimitive(deploymentId));
+        }
         return G.toJson(arr);
     }
 

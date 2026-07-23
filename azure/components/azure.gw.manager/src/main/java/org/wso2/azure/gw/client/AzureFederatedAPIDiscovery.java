@@ -119,8 +119,8 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
                         null, /* expandApiVersionSet */
                         Context.NONE
                 );
-        List<DiscoveredAPI> retrievedAPIs = new ArrayList<>();
-        for (ApiContract api : apis) {
+        List<DiscoveredAPI> retrievedAPIs = java.util.Collections.synchronizedList(new ArrayList<>());
+        apis.stream().parallel().forEach(api -> {
             try {
                 // Get API
                 String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
@@ -141,8 +141,96 @@ public class AzureFederatedAPIDiscovery implements FederatedAPIDiscovery {
             } catch (APIManagementException e) {
                 log.error("Error retrieving API definition for API: " + api.name(), e);
             }
-        }
-        return retrievedAPIs;
+        });
+        return new ArrayList<>(retrievedAPIs);
+    }
+
+    @Override
+    public List<DiscoveredAPI> discoverMetadata() {
+        log.debug("[LOGGING] Azure Connector: discoverMetadata() called. "
+                + "Fetching metadata for Azure APIs in parallel.");
+        PagedIterable<ApiContract> apis = manager.apis()
+                .listByService(resourceGroup, serviceName, "isCurrent eq true",
+                        null, /* top */
+                        null, /* skip */
+                        null, /* tags */
+                        null, /* expandApiVersionSet */
+                        Context.NONE
+                );
+        List<DiscoveredAPI> retrievedAPIs = java.util.Collections.synchronizedList(new ArrayList<>());
+        apis.stream().parallel().forEach(api -> {
+            try {
+                // Get API - Skip fetching heavy spec definition
+                String apiDefinition = "";
+                API apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
+
+                // Get current revision
+                PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions()
+                        .listByService(resourceGroup, serviceName, api.name(), "isCurrent eq true",
+                                null, null, Context.NONE);
+                ApiRevisionContract revisionContract = revisions.stream().findFirst().orElse(null);
+                if (revisionContract == null) {
+                    throw new APIManagementException("Current API Revision not found for api: " + api.name());
+                }
+                String referenceArtifact = AzureAPIUtil.generateReferenceArtifact(apiArtifact, api, null,
+                        revisionContract);
+
+                retrievedAPIs.add(new DiscoveredAPI(apiArtifact, referenceArtifact));
+
+            } catch (Exception e) {
+                log.error("Error retrieving API metadata for API: " + api.name(), e);
+            }
+        });
+        return new ArrayList<>(retrievedAPIs);
+    }
+
+    @Override
+    public List<DiscoveredAPI> discoverAPI(List<String> apiIds) {
+        log.debug("[LOGGING] Azure Connector: discoverAPI(List<String> apiIds) "
+                + "called in parallel with IDs: " + apiIds);
+        PagedIterable<ApiContract> apis = manager.apis()
+                .listByService(resourceGroup, serviceName, "isCurrent eq true",
+                        null, /* top */
+                        null, /* skip */
+                        null, /* tags */
+                        null, /* expandApiVersionSet */
+                        Context.NONE
+                );
+        List<DiscoveredAPI> retrievedAPIs = java.util.Collections.synchronizedList(new ArrayList<>());
+        apis.stream().parallel().forEach(api -> {
+            try {
+                // Calculate deterministic UUID
+                String uuidSeed = api.name() + "-" + organization;
+                String deterministicUuid = java.util.UUID.nameUUIDFromBytes(
+                        uuidSeed.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+                String version = api.apiVersion() != null ? api.apiVersion() : "1.0.0";
+                String compositeKey = api.displayName() + ":" + version;
+
+                if (apiIds.contains(deterministicUuid) || apiIds.contains(compositeKey)) {
+                    log.debug("[LOGGING] Azure Connector: MATCH FOUND. "
+                            + "Fetching spec for Azure API: " + api.name());
+                    // Get API Definition only if it is in the requested apiIds
+                    String apiDefinition = AzureAPIUtil.getRestApiDefinition(manager, httpClient, api);
+                    API apiArtifact = AzureAPIUtil.restAPItoAPI(api, apiDefinition, organization, environment);
+
+                    // Get current revision
+                    PagedIterable<ApiRevisionContract> revisions = manager.apiRevisions()
+                            .listByService(resourceGroup, serviceName, api.name(), "isCurrent eq true",
+                                    null, null, Context.NONE);
+                    ApiRevisionContract revisionContract = revisions.stream().findFirst().orElse(null);
+                    if (revisionContract == null) {
+                        throw new APIManagementException("Current API Revision not found for api: " + api.name());
+                    }
+                    String referenceArtifact = AzureAPIUtil.generateReferenceArtifact(apiArtifact, api, null,
+                            revisionContract);
+
+                    retrievedAPIs.add(new DiscoveredAPI(apiArtifact, referenceArtifact));
+                }
+            } catch (Exception e) {
+                log.error("Error retrieving API definition for API: " + api.name(), e);
+            }
+        });
+        return new ArrayList<>(retrievedAPIs);
     }
 
     @Override

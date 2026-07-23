@@ -71,11 +71,15 @@ public class AWSGatewayConfiguration implements GatewayAgentConfiguration {
         configurationDtoList
                 .add(new ConfigurationDto("region", "AWS Region", "input", "AWS Region", "", true, false, Collections.emptyList(), false));
         configurationDtoList
-                .add(new ConfigurationDto("access_key", "Access Key", "input", "AWS Access Key for Signature Authentication", "", true,
+                .add(new ConfigurationDto("access_key", "Access Key", "input", "AWS Access Key for Signature Authentication", "", false,
                         true, Collections.emptyList(), false));
         configurationDtoList
                 .add(new ConfigurationDto("secret_key", "Secret Key", "input", "AWS Secret Key for Signature Authentication", "",
-                        true, true, Collections.emptyList(), false));
+                        false, true, Collections.emptyList(), false));
+        configurationDtoList
+                .add(new ConfigurationDto("role_arn", "IAM Role ARN", "input",
+                        "AWS IAM Role ARN to assume (e.g., arn:aws:iam::123456789012:role/MyRole)", "",
+                        false, false, Collections.emptyList(), false));
         configurationDtoList.add(new ConfigurationDto("stage", "Stage Name", "input", "Default stage name", "", true,
                 false,
                 Collections.emptyList(), false));

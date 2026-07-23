@@ -510,4 +510,35 @@ public class KongAPIUtil {
         }
         return v.startsWith("/") ? v : "/" + v;
     }
+
+    /**
+     * Creates a lightweight reference artifact JSON string containing serviceId and configHash.
+     */
+    public static String createReferenceArtifact(String serviceId, String compositeHash) {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("serviceId", serviceId);
+        obj.addProperty("configHash", compositeHash);
+        return obj.toString();
+    }
+
+    /**
+     * Helper to compute SHA-256 hex string of a given input.
+     */
+    public static String sha256Hex(String input) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception ex) {
+            throw new RuntimeException("SHA-256 algorithm not found", ex);
+        }
+    }
 }

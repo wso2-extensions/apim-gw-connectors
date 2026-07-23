@@ -27,7 +27,12 @@ import org.wso2.carbon.apimgt.api.model.GatewayAPIValidationResult;
 import org.wso2.carbon.apimgt.api.model.GatewayDeployer;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.http.SdkHttpClient;
@@ -56,13 +61,48 @@ public class AWSGatewayDeployer implements GatewayDeployer {
             this.region = environment.getAdditionalProperties().get(AWSConstants.AWS_ENVIRONMENT_REGION);
             this.stage = environment.getAdditionalProperties().get(AWSConstants.AWS_API_STAGE);
 
+            if (region == null || region.isEmpty()) {
+                throw new APIManagementException("AWS Region is a mandatory configuration");
+            }
+
             String accessKey = environment.getAdditionalProperties().get(AWSConstants.AWS_ENVIRONMENT_ACCESS_KEY);
             String secretKey = environment.getAdditionalProperties().get(AWSConstants.AWS_ENVIRONMENT_SECRET_KEY);
 
+            // Resolve credentials provider: use static keys if provided, otherwise fall back to
+            // DefaultCredentialsProvider which supports IAM Roles (EC2 Instance Profiles, EKS Pod
+            // Identity, environment variables, ~/.aws/credentials, etc.)
+            AwsCredentialsProvider credentialsProvider;
+            if (accessKey != null && !accessKey.isEmpty() && secretKey != null && !secretKey.isEmpty()) {
+                credentialsProvider = StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey));
+            } else {
+                credentialsProvider = DefaultCredentialsProvider.create();
+            }
+
+            // If a Role ARN is provided, assume that role using the base credentials.
+            // This enables cross-account access and least-privilege security.
+            String roleArn = environment.getAdditionalProperties().get(AWSConstants.AWS_ENVIRONMENT_ROLE_ARN);
             SdkHttpClient httpClient = ApacheHttpClient.builder().build();
-            this.apiGatewayClient = ApiGatewayClient.builder().region(Region.of(region))
-                    .httpClient(httpClient).credentialsProvider(StaticCredentialsProvider
-                            .create(AwsBasicCredentials.create(accessKey, secretKey))).build();
+            if (roleArn != null && !roleArn.isEmpty()) {
+                StsClient stsClient = StsClient.builder()
+                        .region(Region.of(region))
+                        .httpClient(httpClient)
+                        .credentialsProvider(credentialsProvider)
+                        .build();
+                credentialsProvider = StsAssumeRoleCredentialsProvider.builder()
+                        .stsClient(stsClient)
+                        .refreshRequest(AssumeRoleRequest.builder()
+                                .roleArn(roleArn)
+                                .roleSessionName("WSO2-APIM-Deployer-" + environment.getName())
+                                .build())
+                        .build();
+            }
+
+            this.apiGatewayClient = ApiGatewayClient.builder()
+                    .region(Region.of(region))
+                    .httpClient(httpClient)
+                    .credentialsProvider(credentialsProvider)
+                    .build();
         } catch (Exception e) {
             throw new APIManagementException("Error occurred while initializing AWS Gateway Deployer", e);
         }
