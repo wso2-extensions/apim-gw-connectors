@@ -156,7 +156,7 @@
         <project.scm.id>scm-server</project.scm.id>
         <carbon.p2.plugin.version>1.5.3</carbon.p2.plugin.version>
         <carbon.apimgt.version>9.32.74</carbon.apimgt.version>
-        <org.wso2.orbit.azure.resourcemanager.apimanagement.version>2.0.0.wso2v4</org.wso2.orbit.azure.resourcemanager.apimanagement.version>
+        <org.wso2.orbit.azure.resourcemanager.apimanagement.version>2.0.0.wso2v5</org.wso2.orbit.azure.resourcemanager.apimanagement.version>
         <maven.checkstyle.plugin.version>3.0.0</maven.checkstyle.plugin.version>
     </properties>
 
