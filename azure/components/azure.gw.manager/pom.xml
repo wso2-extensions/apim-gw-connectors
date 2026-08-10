@@ -80,6 +80,11 @@
             <groupId>org.wso2.orbit.com.azure.resourcemanager</groupId>
             <artifactId>azure-resourcemanager-apimanagement</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.spec.parser</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <properties>

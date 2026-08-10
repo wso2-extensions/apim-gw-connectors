@@ -58,6 +58,7 @@ import org.wso2.azure.gw.client.policy.policies.AzureCORSPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureJWTPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureRateLimitPolicy;
 import org.wso2.azure.gw.client.policy.policies.AzureSetHeaderPolicy;
+import org.wso2.carbon.apimgt.api.APIDefinition;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
@@ -65,10 +66,12 @@ import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
+import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -435,5 +438,26 @@ public class AzureAPIUtil {
         endpointConfig.add("sandbox_endpoints", sand);
 
         return endpointConfig.toString();
+    }
+
+    /**
+     * Check if the API definition has resources.
+     *
+     * @param apiDefinition The API definition string (OpenAPI/Swagger JSON).
+     * @return true if the API has resources, false otherwise.
+     */
+    public static boolean hasResources(String apiDefinition) {
+        if (StringUtils.isEmpty(apiDefinition)) {
+            return false;
+        }
+        try {
+            APIDefinition oasParser = OASParserUtil.getOASParser(apiDefinition);
+            Set<URITemplate> uriTemplates = oasParser
+                    .getURITemplates(apiDefinition);
+            return uriTemplates != null && !uriTemplates.isEmpty();
+        } catch (APIManagementException e) {
+            log.warn("Error while parsing API definition to check for resources, using regex fallback", e);
+            return false;
+        }
     }
 }
