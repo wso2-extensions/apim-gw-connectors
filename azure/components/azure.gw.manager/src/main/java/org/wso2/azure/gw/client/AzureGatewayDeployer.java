@@ -25,6 +25,7 @@ import com.azure.core.management.AzureEnvironment;
 import com.azure.core.management.profile.AzureProfile;
 import com.azure.identity.ClientSecretCredentialBuilder;
 import com.azure.resourcemanager.apimanagement.ApiManagementManager;
+import com.azure.resourcemanager.apimanagement.models.ApiType;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -115,6 +116,9 @@ public class AzureGatewayDeployer implements GatewayDeployer {
      */
     @Override
     public String deploy(API api, String externalReference) throws APIManagementException {
+        if (AzureConstants.AZURE_API_TYPE_WEBSOCKET.equalsIgnoreCase(api.getType())) {
+            return AzureAPIUtil.deployWebSocketAPI(api, manager, resourceGroup, serviceName);
+        }
         return AzureAPIUtil.deployRestAPI(api, manager, resourceGroup, serviceName);
     }
 
