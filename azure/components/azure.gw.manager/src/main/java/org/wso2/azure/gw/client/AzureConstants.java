@@ -46,6 +46,7 @@ public class AzureConstants {
 
     public static final String AZURE_OPENAPI_EXPORT_VERSION = "2024-05-01";
     public static final String AZURE_OPENAPI_EXPORT_FORMAT = "openapi-link";
+    public static final String AZURE_DEFAULT_VERSION = "1.0.0";
 
     public static final String API_CONTEXT_VERSION_PLACEHOLDER = "{version}";
 
@@ -82,6 +83,23 @@ public class AzureConstants {
     public static final String AZURE_BASE_POLICY_FILENAME = "policies/base.xml";
     public static final String AZURE_SET_HEADER_POLICY_FILENAME = "policies/set-header.xml";
     public static final String AZURE_RATE_LIMIT_POLICY_FILENAME = "policies/rate-limit.xml";
+
+    // API type constants
+    public static final String AZURE_API_TYPE_HTTP = "HTTP";
+    public static final String AZURE_API_TYPE_WEBSOCKET = "WS";
+
+    // Transport constants
+    public static final String AZURE_HTTP_TRANSPORTS = "http,https";
+    public static final String AZURE_WEBSOCKET_TRANSPORTS = "ws,wss";
+
+    // Protocol constants
+    public static final String AZURE_PROTOCOL_HTTP = "http";
+    public static final String AZURE_PROTOCOL_HTTPS = "https";
+    public static final String AZURE_PROTOCOL_WS = "ws";
+    public static final String AZURE_PROTOCOL_WSS = "wss";
+
+    // AsyncAPI version
+    public static final String ASYNC_API_VERSION = "2.0.0";
 
     // Environment related constants
     public static final String AZURE_ENVIRONMENT_TENANT_ID = "tenant_id";
