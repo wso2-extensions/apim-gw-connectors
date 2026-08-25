@@ -97,6 +97,19 @@ public class KongAPIUtil {
         return cors;
     }
 
+    public static String determineAPIType(KongService service) {
+    // 1. Check Service Protocol (The most common indicator)
+        if (service != null && service.getProtocol() != null) {
+            String proto = service.getProtocol().toLowerCase();
+            if ("ws".equals(proto) || "wss".equals(proto)) {
+                return "WS"; 
+            } else if ("http".equals(proto) || "https".equals(proto)) {
+                return "HTTP"; 
+            }
+        }
+        return null;
+    }
+
     public static boolean getBoolean(JsonObject obj, String key, boolean def) {
         if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()) {
             return def;
@@ -373,6 +386,74 @@ public class KongAPIUtil {
         // components left empty for now
         root.add("components", new JsonObject());
 
+        return root.toString();
+    }
+
+    public static String buildOasFromRoutesForAsync(KongService svc, List<KongRoute> routes, String vhost) {
+        JsonObject root = new JsonObject();
+        root.addProperty("asyncapi", "2.0.0");
+
+        JsonObject info = new JsonObject();
+        info.addProperty("title", svc.getName() != null ? svc.getName() : "kong-service");
+        info.addProperty("version", "v1");
+        root.add("info", info);
+
+        JsonObject servers = new JsonObject();
+        JsonObject production = new JsonObject();
+        production.addProperty("url", "wss://" + vhost);
+        production.addProperty("protocol", "wss");
+        servers.add("production", production);
+        root.add("servers", servers);
+
+        JsonObject channels = new JsonObject();
+        for (KongRoute r : routes) {
+            List<String> routePaths = (r.getPaths() != null && !r.getPaths().isEmpty()) ?
+                    r.getPaths() : Collections.singletonList("/*");
+
+            for (String kongPath : routePaths) {
+                String oasPath = toOasPath(kongPath);
+                if (channels.has(oasPath)) {
+                    continue;
+                }
+                JsonObject channelItem = new JsonObject();
+                JsonObject pub = new JsonObject();
+                pub.addProperty("operationId", safeOpId(r.getName(), "pub", oasPath));
+                channelItem.add("publish", pub);
+                JsonObject sub = new JsonObject();
+                sub.addProperty("operationId", safeOpId(r.getName(), "sub", oasPath));
+                channelItem.add("subscribe", sub);
+
+                // Parameters
+                Matcher m = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_-]*)\\}").matcher(oasPath);
+                JsonObject parameters = new JsonObject();
+                while (m.find()) {
+                    String pName = m.group(1);
+                    JsonObject pObj = new JsonObject();
+                    JsonObject schema = new JsonObject();
+                    schema.addProperty("type", "string");
+                    pObj.add("schema", schema);
+                    parameters.add(pName, pObj);
+                }
+                if (parameters.size() > 0) {
+                    channelItem.add("parameters", parameters);
+                }
+                channels.add(oasPath, channelItem);
+            }
+        }
+
+        if (channels.entrySet().isEmpty()) {
+            JsonObject channelItem = new JsonObject();
+            JsonObject pub = new JsonObject();
+            pub.addProperty("operationId", "pub_default");
+            channelItem.add("publish", pub);
+            JsonObject sub = new JsonObject();
+            sub.addProperty("operationId", "sub_default");
+            channelItem.add("subscribe", sub);
+            channels.add("/*", channelItem);
+        }
+
+        root.add("channels", channels);
+        root.add("components", new JsonObject());
         return root.toString();
     }
 

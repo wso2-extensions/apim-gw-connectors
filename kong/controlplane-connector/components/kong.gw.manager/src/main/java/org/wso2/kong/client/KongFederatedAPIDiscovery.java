@@ -180,6 +180,7 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                         String cpId = link.getControlPlaneId();
                         String serviceId = link.getId();
                         svc = apiGatewayClient.getService(cpId, serviceId);
+                        String apiType = KongAPIUtil.determineAPIType(svc);
                         if (svc != null && svc.getHost() != null && svc.getProtocol() != null &&
                                 svc.getPort() != null) {
                             String endpoint = KongAPIUtil.buildEndpointUrl(
@@ -188,7 +189,16 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                                     svc.getPort(),
                                     svc.getPath()
                             );
+                            api.setType(apiType);
                             api.setEndpointConfig(KongAPIUtil.buildEndpointConfigJson(endpoint, endpoint, false));
+                            if (oas != null) {
+                                if ("WS".equals(apiType)) {
+                                    api.setAsyncApiDefinition(oas);
+                                    api.setTransports("ws,wss");
+                                } else if ("HTTP".equals(apiType)) {
+                                    api.setTransports("http,https");
+                                }
+                            }
                         }
                     }
 
@@ -288,13 +298,22 @@ public class KongFederatedAPIDiscovery implements FederatedAPIDiscovery {
                     api.setInitiatedFromGateway(true);
                     api.setGatewayVendor(KongConstants.DEFAULT_GATEWAY_VENDOR);
                     api.setGatewayType(environment.getGatewayType());
+                    api.setType(KongAPIUtil.determineAPIType(svc));
 
+                    String ApiType = KongAPIUtil.determineAPIType(svc);
                     String vhost = environment.getVhosts() != null && !environment.getVhosts().isEmpty() ?
                             environment.getVhosts().get(0).getHost() :
                             KongConstants.DEFAULT_VHOST;
-
-                    String apiDefinition = KongAPIUtil.buildOasFromRoutes(svc, routes, vhost);
-                    api.setSwaggerDefinition(apiDefinition);
+                    if ("WS".equalsIgnoreCase(ApiType)) {
+                        api.setTransports("ws,wss");
+                        api.setAsyncApiDefinition(
+                                KongAPIUtil.buildOasFromRoutesForAsync(svc, routes, vhost)
+                        );
+                    } else {
+                        api.setTransports("http,https");
+                        api.setSwaggerDefinition(
+                                KongAPIUtil.buildOasFromRoutes(svc, routes, vhost));
+                    }
                     String endpoint = KongAPIUtil.buildEndpointUrl(svc.getProtocol(), svc.getHost(), svc.getPort(),
                             svc.getPath());
                     api.setEndpointConfig(KongAPIUtil.buildEndpointConfigJson(endpoint, endpoint, false));
